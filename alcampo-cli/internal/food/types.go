@@ -75,19 +75,27 @@ type RecipeStep struct {
 	ImageURL string `json:"image_url,omitempty"`
 }
 
+type NutritionSummary struct {
+	Kcal     float64 `json:"kcal,omitempty"`
+	ProteinG float64 `json:"protein_g,omitempty"`
+	CarbsG   float64 `json:"carbs_g,omitempty"`
+	FatG     float64 `json:"fat_g,omitempty"`
+}
+
 type Recipe struct {
-	ID            string       `json:"id"`
-	Title         string       `json:"title"`
-	Servings      int          `json:"servings"`
-	PrepMinutes   int          `json:"prep_minutes,omitempty"`
-	CookMinutes   int          `json:"cook_minutes,omitempty"`
-	Tags          []string     `json:"tags,omitempty"`
-	ImageURL      string       `json:"image_url,omitempty"`
-	Ingredients   []Ingredient `json:"ingredients"`
-	Equipment     []string     `json:"equipment,omitempty"`
-	Steps         []RecipeStep `json:"steps"`
-	Substitutions []string     `json:"substitutions,omitempty"`
-	AllergenNotes []string     `json:"allergen_notes,omitempty"`
+	ID                  string            `json:"id"`
+	Title               string            `json:"title"`
+	Servings            int               `json:"servings"`
+	PrepMinutes         int               `json:"prep_minutes,omitempty"`
+	CookMinutes         int               `json:"cook_minutes,omitempty"`
+	Tags                []string          `json:"tags,omitempty"`
+	ImageURL            string            `json:"image_url,omitempty"`
+	Ingredients         []Ingredient      `json:"ingredients"`
+	Equipment           []string          `json:"equipment,omitempty"`
+	Steps               []RecipeStep      `json:"steps"`
+	Substitutions       []string          `json:"substitutions,omitempty"`
+	AllergenNotes       []string          `json:"allergen_notes,omitempty"`
+	NutritionPerServing *NutritionSummary `json:"nutrition_per_serving,omitempty"`
 }
 
 type DayPlan struct {
@@ -111,17 +119,25 @@ type PantryUsage struct {
 }
 
 type MealPlan struct {
-	ID                string        `json:"id"`
-	CreatedAt         string        `json:"created_at"`
-	People            int           `json:"people"`
-	Days              []DayPlan     `json:"days"`
-	BudgetEUR         string        `json:"budget_eur,omitempty"`
-	SelectionPolicy   string        `json:"selection_policy,omitempty"`
-	PantryUsage       []PantryUsage `json:"pantry_usage,omitempty"`
-	RequiredPurchases []Ingredient  `json:"required_purchases"`
-	MissingItems      []string      `json:"missing_items,omitempty"`
-	Notes             []string      `json:"notes,omitempty"`
-	File              string        `json:"file,omitempty"`
+	ID                string            `json:"id"`
+	CreatedAt         string            `json:"created_at"`
+	People            int               `json:"people"`
+	Days              []DayPlan         `json:"days"`
+	BudgetEUR         string            `json:"budget_eur,omitempty"`
+	SelectionPolicy   string            `json:"selection_policy,omitempty"`
+	PantryUsage       []PantryUsage     `json:"pantry_usage,omitempty"`
+	RequiredPurchases []Ingredient      `json:"required_purchases"`
+	MissingItems      []string          `json:"missing_items,omitempty"`
+	Notes             []string          `json:"notes,omitempty"`
+	Nutrition         *NutritionSummary `json:"nutrition,omitempty"`
+	File              string            `json:"file,omitempty"`
+}
+
+type UseUpSuggestion struct {
+	Recipe        Recipe   `json:"recipe"`
+	Score         float64  `json:"score"`
+	ExpiringItems []string `json:"expiring_items"`
+	Reason        string   `json:"reason,omitempty"`
 }
 
 type ProductSummary struct {
@@ -181,6 +197,7 @@ type ShopResult struct {
 	EstimatedTotal   money.Money       `json:"estimated_total"`
 	Complete         bool              `json:"complete"`
 	Notes            []string          `json:"notes,omitempty"`
+	Nutrition        *NutritionSummary `json:"nutrition,omitempty"`
 }
 
 type CookResult struct {

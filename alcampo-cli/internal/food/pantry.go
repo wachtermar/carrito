@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"alcampo-cli/internal/strutil"
 )
 
 func AddOrUpdatePantryItem(p Pantry, item PantryItem) (Pantry, PantryItem, error) {
@@ -146,7 +148,7 @@ func ApplyPantry(planRequired []Ingredient, pantry Pantry) ([]Ingredient, []Pant
 				Ingredient: ing.Name,
 				PantryItem: items[i].Name,
 				Quantity:   used,
-				Unit:       firstNonEmpty(ing.Unit, items[i].Unit),
+				Unit:       strutil.FirstNonEmpty(ing.Unit, items[i].Unit),
 				Location:   items[i].Location,
 			})
 		}
@@ -163,7 +165,7 @@ func mergeIngredients(items []Ingredient) []Ingredient {
 	byKey := map[string]int{}
 	var out []Ingredient
 	for _, item := range items {
-		key := normalizeKey(firstNonEmpty(item.SearchTerm, item.Name)) + "|" + normalizeUnit(item.Unit)
+		key := normalizeKey(strutil.FirstNonEmpty(item.SearchTerm, item.Name)) + "|" + normalizeUnit(item.Unit)
 		if idx, ok := byKey[key]; ok {
 			out[idx].Quantity = roundQty(out[idx].Quantity + item.Quantity)
 			continue
@@ -181,7 +183,7 @@ func ingredientMatchesPantry(ing Ingredient, item PantryItem) bool {
 	if ing.Unit != "" && item.Unit != "" && normalizeUnit(ing.Unit) != normalizeUnit(item.Unit) {
 		return false
 	}
-	return namesMatch(ing.Name, item.Name) || namesMatch(firstNonEmpty(ing.SearchTerm, ing.Name), item.Name)
+	return namesMatch(ing.Name, item.Name) || namesMatch(strutil.FirstNonEmpty(ing.SearchTerm, ing.Name), item.Name)
 }
 
 func samePantryItem(a, b PantryItem) bool {
@@ -248,13 +250,4 @@ func normalizeUnit(unit string) string {
 
 func roundQty(v float64) float64 {
 	return math.Round(v*1000) / 1000
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

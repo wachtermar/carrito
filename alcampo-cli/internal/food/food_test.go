@@ -38,6 +38,7 @@ func TestApplyPantrySubtractsPartialQuantities(t *testing.T) {
 }
 
 func TestGenerateMealPlanPrioritizesExpiringPantryItems(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	expiry := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
 	plan, err := GenerateMealPlan(Profile{}, Pantry{Items: []PantryItem{
 		{Name: "eggs", Quantity: 4, Unit: "unit", Location: "fridge", ExpiryDate: expiry},
@@ -52,9 +53,13 @@ func TestGenerateMealPlanPrioritizesExpiringPantryItems(t *testing.T) {
 	if !strings.Contains(got.PlanningReason, "expiring") {
 		t.Fatalf("planning reason did not mention expiry: %q", got.PlanningReason)
 	}
+	if !strings.Contains(strings.Join(plan.Notes, " "), "Expiring soon") {
+		t.Fatalf("plan notes did not mention expiring items: %+v", plan.Notes)
+	}
 }
 
 func TestGenerateMealPlanSkipsRejectedRecipes(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	expiry := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
 	plan, err := GenerateMealPlan(Profile{RejectedRecipes: []string{"spanish-tortilla"}}, Pantry{Items: []PantryItem{
 		{Name: "eggs", Quantity: 4, Unit: "unit", Location: "fridge", ExpiryDate: expiry},
@@ -69,6 +74,7 @@ func TestGenerateMealPlanSkipsRejectedRecipes(t *testing.T) {
 }
 
 func TestGenerateMealPlanAddsLowStockStaples(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	plan, err := GenerateMealPlan(Profile{
 		Staples: []Staple{
 			{Name: "milk", MinQty: 2, Unit: "l", SearchTerm: "leche"},
@@ -93,6 +99,26 @@ func TestGenerateMealPlanAddsLowStockStaples(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(plan.Notes, " "), "Low-stock household staples") {
 		t.Fatalf("missing staple note: %+v", plan.Notes)
+	}
+}
+
+func TestSuggestUseUpRecipesRanksExpiringPantry(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	expiry := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	suggestions, err := SuggestUseUpRecipes(Profile{}, Pantry{Items: []PantryItem{
+		{Name: "eggs", Quantity: 4, Unit: "unit", Location: "fridge", ExpiryDate: expiry},
+	}}, 3, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) == 0 {
+		t.Fatal("no suggestions returned")
+	}
+	if suggestions[0].Recipe.ID != "spanish-tortilla" {
+		t.Fatalf("first suggestion = %q, want spanish-tortilla", suggestions[0].Recipe.ID)
+	}
+	if len(suggestions[0].ExpiringItems) != 1 || suggestions[0].ExpiringItems[0] != "eggs" {
+		t.Fatalf("unexpected expiring items: %+v", suggestions[0])
 	}
 }
 

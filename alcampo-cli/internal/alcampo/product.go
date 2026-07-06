@@ -9,6 +9,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"alcampo-cli/internal/strutil"
 )
 
 func (c *Client) Product(ctx context.Context, ref string) (Product, error) {
@@ -44,7 +46,7 @@ func (c *Client) Product(ctx context.Context, ref string) (Product, error) {
 		p.URL = productPageURL(c.BaseURL, p.SKU)
 	}
 	if p.Price.Amount == "" || p.Available == nil || p.Category == "" {
-		if listing, err := c.Lookup(ctx, firstNonEmpty(p.SKU, productRef, p.Name)); err == nil {
+		if listing, err := c.Lookup(ctx, strutil.FirstNonEmpty(p.SKU, productRef, p.Name)); err == nil {
 			mergeProduct(&p, listing)
 		}
 	}
@@ -362,13 +364,4 @@ func extractAssignment(body []byte, name string) []byte {
 		}
 	}
 	return nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }

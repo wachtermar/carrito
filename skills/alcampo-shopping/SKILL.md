@@ -39,16 +39,20 @@ Resolve `{baseDir}` as the directory containing this `SKILL.md`.
    - `alcampo food profile get --json`
    - `alcampo food pantry list --json`
    - `alcampo food staples list --json`
+   - `alcampo food recipes list --json` when the user asks what meals are available or wants custom recipe work.
    - `alcampo food profile set --selection-policy balanced|cheapest|quality` if no policy is saved.
-5. For low-intervention planning and shopping, prefer `alcampo food run --days <n> --people <n> --meals dinner --selection-policy <policy> --basket-out basket.txt --json`.
-6. For separate steps, generate a plan with `alcampo food plan --days <n> --people <n> --json`, then shop it with `alcampo food shop <mealplan-id-or-file> --basket-out basket.txt --json`.
-7. Show the user selected products, grouped shopping sections, item images, offers, prices, package quantity calculations, reasons chosen, alternates considered, missing/unavailable items, basket file path, and estimated total before any cart mutation.
-8. Create printable artifacts with `alcampo food recipe <prompt|mealplan-id> --json --out <recipe.json>` and `alcampo food pdf <recipe-or-plan-or-shop.json> --out <file.pdf>`.
-9. After the user confirms a shop was actually bought or delivered, use `alcampo food receive <shop-or-run.json> --json` to add received products to pantry memory and append history.
-10. After the user cooks a plan, use `alcampo food cook <mealplan-id-or-file> --rating <1-5> --json` to update pantry quantities, append history, learn liked recipes from high ratings, and learn rejected recipes from low ratings.
-11. Use `alcampo food history list --json` when prior cooking or receiving feedback would improve a new plan.
-12. For basket pricing, write or receive a basket file with `<product_id_or_sku> <qty>` per line, then run `alcampo total -f <file> --json`.
-13. For cart or checkout writes, require an authenticated/imported session and a nonzero spending guard: `--max <eur>`, `ALCAMPO_MAX_EUR`, or `[limits] max_eur`.
+5. Use `alcampo food pantry list --expiring-days 3 --json` and `alcampo food use-up --json` when the user wants to reduce waste or use expiring items.
+6. For low-intervention planning and shopping, prefer `alcampo food run --days <n> --people <n> --meals dinner --selection-policy <policy> --basket-out basket.txt --json`.
+7. For separate steps, generate a plan with `alcampo food plan --days <n> --people <n> --json`, then shop it with `alcampo food shop <mealplan-id-or-file> --basket-out basket.txt --json`.
+8. Show the user selected products, grouped shopping sections, item images, offers, prices, package quantity calculations, nutrition summaries, reasons chosen, alternates considered, missing/unavailable items, basket file path, and estimated total before any cart mutation.
+9. Create printable artifacts with `alcampo food recipe <prompt|mealplan-id> --json --out <recipe.json>` and `alcampo food pdf <recipe-or-plan-or-shop.json> --out <file.pdf>`.
+10. Add custom recipes with `alcampo food recipes add <file|-> --json`, or `--from-text --title <title>` for pasted ingredient lists.
+11. After the user confirms a shop was actually bought or delivered, use `alcampo food receive <shop-or-run.json> --json` to add received products to pantry memory and append history.
+12. Import external pantry evidence with `alcampo food import-receipt --file <text|-> --json`, or authenticated best-effort order history with `alcampo food import-orders --limit <n> --infer-staples --json`.
+13. After the user cooks a plan, use `alcampo food cook <mealplan-id-or-file> --rating <1-5> --json` to update pantry quantities, append history, learn liked recipes from high ratings, and learn rejected recipes from low ratings.
+14. Use `alcampo food history list --json` when prior cooking, receiving, receipt, or order import feedback would improve a new plan.
+15. For basket pricing, write or receive a basket file with `<product_id_or_sku> <qty>` per line, then run `alcampo total -f <file> --json`.
+16. For cart or checkout writes, require an authenticated/imported session and a nonzero spending guard: `--max <eur>`, `ALCAMPO_MAX_EUR`, or `[limits] max_eur`.
 
 Load `{baseDir}/references/food-agent-playbook.md` for detailed autonomous meal-planning, product-selection, offer, image, quantity, memory, and human-approval rules.
 
@@ -57,8 +61,10 @@ Load `{baseDir}/references/food-agent-playbook.md` for detailed autonomous meal-
 Food memory is local JSON under `ALCAMPO_CONFIG_DIR/food/` or `~/.alcampo/food/`:
 
 - `profile.json`: household size, diets, allergies, dislikes, liked cuisines, liked/rejected recipes, liked/rejected products, budget, preferred/rejected brands, and persistent `selection_policy`.
+- `profile.json` can store free-form `nutrition_goals` such as `kcal<=2200` or `protein>=90`; meal plans add warning notes when computed totals miss them.
 - `profile.json` also stores repeat `staples` with minimum quantities so low-stock essentials can be added automatically.
 - `pantry.json`: pantry/fridge/freezer items, quantities, units, locations, expiry dates, confidence, and last checked timestamps.
+- `recipes/*.json`: user recipe objects or arrays. User recipe ids override embedded seed recipes.
 - `mealplans/*.json`: saved meal plans with recipes, pantry usage, required purchases, and notes.
 - `history.jsonl`: append-only cooked plans, ratings, pantry updates, substitutions, and rejected products.
 

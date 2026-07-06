@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"alcampo-cli/internal/strutil"
 )
 
 func ReceiveShopResult(shop ShopResult, pantry Pantry, opts ReceiveOptions) (Pantry, ReceiveResult) {
@@ -90,7 +92,7 @@ func pantryItemFromSelection(selected SelectedProduct, opts ReceiveOptions) (Pan
 
 	name := strings.TrimSpace(selected.Ingredient.Name)
 	if name == "" {
-		name = firstNonEmpty(selected.Product.Name, selected.Product.SKU, selected.Product.ID)
+		name = strutil.FirstNonEmpty(selected.Product.Name, selected.Product.SKU, selected.Product.ID)
 	}
 	location := strings.TrimSpace(opts.Location)
 	if location == "" {
@@ -98,7 +100,7 @@ func pantryItemFromSelection(selected SelectedProduct, opts ReceiveOptions) (Pan
 	}
 	notes := strings.TrimSpace(strings.Join([]string{
 		"received from Alcampo shop result",
-		firstNonEmpty(selected.Product.SKU, selected.Product.ID),
+		strutil.FirstNonEmpty(selected.Product.SKU, selected.Product.ID),
 		selected.Product.Name,
 	}, "; "))
 	return PantryItem{

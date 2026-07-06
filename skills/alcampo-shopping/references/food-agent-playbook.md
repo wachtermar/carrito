@@ -8,7 +8,9 @@ Use this reference when the user asks for meal plans, recipes, pantry-aware shop
    - `alcampo market --json`
    - `alcampo food profile get --json`
    - `alcampo food pantry list --json`
+   - `alcampo food pantry list --expiring-days 3 --json` when waste reduction matters
    - `alcampo food staples list --json`
+   - `alcampo food recipes list --json` when selecting from or editing the recipe library
    - `alcampo food history list --limit 20 --json` when prior ratings or substitutions could affect the request.
 2. Resolve only missing high-impact preferences:
    - If `selection_policy` is missing, ask once or pass `--selection-policy balanced|cheapest|quality` and let the CLI remember it.
@@ -19,9 +21,11 @@ Use this reference when the user asks for meal plans, recipes, pantry-aware shop
 4. Present review output before cart mutation:
    - meal plan and recipes
    - pantry/fridge items used
+   - expiring pantry items and `food use-up` suggestions when relevant
    - required purchases
    - grouped shopping sections with subtotals
    - selected Alcampo products with image URLs
+   - nutrition totals and warnings against saved nutrition goals
    - embedded images in PDFs when image URLs are retrievable
    - offer/deal reasoning
    - package quantity calculation
@@ -36,7 +40,11 @@ Use this reference when the user asks for meal plans, recipes, pantry-aware shop
 6. After the user confirms the shop was bought, picked up, or delivered, update pantry:
    - `alcampo food receive <shop-or-run.json> --json`
    - This imports selected products into pantry using purchased package counts and writes a `shop_received` history event.
-7. After cooking, update memory:
+7. For external purchase evidence, update pantry with imports:
+   - `alcampo food import-receipt --file <text|-> --json`
+   - `alcampo food import-orders --limit <n> --infer-staples --json` when an authenticated session is available.
+   - Treat receipt/order parsing as best-effort and show warnings or suggested staples before relying on them.
+8. After cooking, update memory:
    - `alcampo food cook <mealplan-id-or-file> --rating <1-5> --json`
    - This subtracts planned pantry/fridge usage, appends history, learns liked recipes from 4-5 star ratings, and learns rejected recipes from 1-2 star ratings.
 
@@ -76,6 +84,8 @@ Use local JSON memory to reduce future questions:
 - Save household defaults with `food profile set`.
 - Save repeat essentials with `food staples add <item> --min <qty> --unit <unit> --search <term>`.
 - Save pantry/fridge/freezer facts with `food pantry add|update`.
+- Save custom recipes with `food recipes add <file|-> --json` or `food recipes add <file|-> --from-text --title <title> --json`.
+- Use `food profile set --nutrition-goals "kcal<=2200,protein>=90"` when the user provides nutrition targets.
 - Save product feedback with `food profile set --liked-products <sku-or-name>` or `--rejected-products <sku-or-name>` when a user rejects or asks to repeat a product.
 - After a completed shop, prefer `food receive` over manual pantry edits so package quantities, pantry, and history update together.
 - After cooking a generated plan, prefer `food cook` over manual pantry edits so pantry, history, liked recipes, and rejected recipes update together.
@@ -105,14 +115,18 @@ Ask or stop when:
 
 ## Roadmap For A Near-Perfect Skill
 
-Prioritize these additions after the current CLI:
+Delivered in the current CLI:
 
-- import previous Alcampo orders/cart as purchase history and pantry restock hints
-- scan/import receipts or barcodes into pantry memory
-- track expiry and prioritize recipes that use expiring items
-- infer staples from previous carts/orders and ask once before saving them
+- import previous Alcampo orders as purchase history and pantry restock hints
+- import plain-text receipts into pantry memory
+- track expiry, filter expiring pantry items, and prioritize recipes that use them
+- infer staple suggestions from previous orders with `--infer-staples`
 - support custom recipe imports and user recipe libraries
 - add nutrition targets and per-plan nutrition summaries
+
+Remaining future improvements:
+
+- scan barcodes into pantry memory
 - add leftover generation and automatic pantry updates after cooking
 - group basket by Alcampo aisle/category for faster review
 - maintain substitution history per ingredient and per brand

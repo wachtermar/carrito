@@ -9,6 +9,7 @@ import (
 
 	"alcampo-cli/internal/alcampo"
 	"alcampo-cli/internal/money"
+	"alcampo-cli/internal/strutil"
 )
 
 type ShopOptions struct {
@@ -29,9 +30,9 @@ func ShopMealPlan(ctx context.Context, client *alcampo.Client, plan MealPlan, pr
 	if limit <= 0 {
 		limit = 8
 	}
-	result := ShopResult{MealPlanID: plan.ID, Policy: normalized, Complete: true}
+	result := ShopResult{MealPlanID: plan.ID, Policy: normalized, Complete: true, Nutrition: plan.Nutrition}
 	for _, ingredient := range plan.RequiredPurchases {
-		query := firstNonEmpty(ingredient.SearchTerm, ingredient.Name)
+		query := strutil.FirstNonEmpty(ingredient.SearchTerm, ingredient.Name)
 		products, err := client.Search(ctx, query, alcampo.SearchOptions{Limit: limit, RegionID: client.RegionID})
 		if err != nil {
 			result.Complete = false
@@ -98,7 +99,7 @@ func GroupSelectedProducts(selected []SelectedProduct) []ShoppingGroup {
 }
 
 func shoppingCategory(item SelectedProduct) string {
-	category := firstNonEmpty(item.Product.Category, item.Ingredient.Category, "Other")
+	category := strutil.FirstNonEmpty(item.Product.Category, item.Ingredient.Category, "Other")
 	category = strings.TrimSpace(category)
 	if category == "" {
 		return "Other"
@@ -331,7 +332,7 @@ func packageFitScore(ingredient Ingredient, product ProductSummary) (float64, st
 }
 
 func matchScore(ingredient Ingredient, product alcampo.Product) float64 {
-	target := normalizeKey(firstNonEmpty(ingredient.SearchTerm, ingredient.Name))
+	target := normalizeKey(strutil.FirstNonEmpty(ingredient.SearchTerm, ingredient.Name))
 	text := normalizeKey(product.Name + " " + product.Brand + " " + product.Category + " " + strings.Join(product.CategoryPath, " "))
 	if target == "" || text == "" {
 		return 0

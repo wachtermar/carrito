@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"alcampo-cli/internal/money"
+	"alcampo-cli/internal/strutil"
 )
 
 var (
@@ -121,23 +122,26 @@ func multiplyMoney(price money.Money, count int) money.Money {
 		return money.Money{}
 	}
 	cents := price.Cents * int64(count)
-	return money.Money{Amount: money.FormatAmount(cents), Currency: firstNonEmpty(price.Currency, "EUR"), Cents: cents}
+	return money.Money{Amount: money.FormatAmount(cents), Currency: strutil.FirstNonEmpty(price.Currency, "EUR"), Cents: cents}
 }
 
 func normalizePackageText(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
-	replacements := map[string]string{
-		"×":        "x",
-		"litros":   "l",
-		"litro":    "l",
-		"gramos":   "g",
-		"kilos":    "kg",
-		"kilo":     "kg",
-		"unidades": "unit",
-		"unidad":   "unit",
+	replacements := []struct {
+		old string
+		new string
+	}{
+		{"unidades", "unit"},
+		{"unidad", "unit"},
+		{"litros", "l"},
+		{"litro", "l"},
+		{"gramos", "g"},
+		{"kilos", "kg"},
+		{"kilo", "kg"},
+		{"×", "x"},
 	}
-	for old, next := range replacements {
-		s = strings.ReplaceAll(s, old, next)
+	for _, replacement := range replacements {
+		s = strings.ReplaceAll(s, replacement.old, replacement.new)
 	}
 	return s
 }

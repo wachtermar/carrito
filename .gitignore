@@ -1,0 +1,15 @@
+# Build artifacts
+/alcampo-cli/alcampo
+/dist/
+
+# OS / editor noise
+*.DS_Store
+
+# Local secrets / session exports
+/.env
+*.har
+
+# Generated artifacts from manual testing / skill runs
+*.pdf
+basket.txt
+*-shop.json

@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"alcampo-cli/internal/strutil"
 )
 
 func WritePDFFromJSONFile(inputPath, outputPath string) error {
@@ -138,10 +140,13 @@ func pdfLinesForMealPlan(plan MealPlan) (string, []string) {
 	}
 	lines := []string{
 		fmt.Sprintf("People: %d", plan.People),
-		"Selection policy: " + firstNonEmpty(plan.SelectionPolicy, "not set"),
-		"Budget: " + firstNonEmpty(plan.BudgetEUR, "not set"),
-		"",
+		"Selection policy: " + strutil.FirstNonEmpty(plan.SelectionPolicy, "not set"),
+		"Budget: " + strutil.FirstNonEmpty(plan.BudgetEUR, "not set"),
 	}
+	if plan.Nutrition != nil {
+		lines = append(lines, "Nutrition: "+formatNutritionSummary(*plan.Nutrition))
+	}
+	lines = append(lines, "")
 	for _, day := range plan.Days {
 		lines = append(lines, fmt.Sprintf("Day %d", day.Day))
 		for _, meal := range day.Meals {
@@ -192,10 +197,12 @@ func pdfLinesForRecipes(mealPlanID string, recipes []Recipe) (string, []string) 
 func pdfLinesForShop(shop ShopResult) (string, []string) {
 	lines := []string{
 		"Selection policy: " + shop.Policy,
-		"Estimated total: " + shop.EstimatedTotal.Amount + " " + firstNonEmpty(shop.EstimatedTotal.Currency, "EUR"),
-		"",
-		"Selected products:",
+		"Estimated total: " + shop.EstimatedTotal.Amount + " " + strutil.FirstNonEmpty(shop.EstimatedTotal.Currency, "EUR"),
 	}
+	if shop.Nutrition != nil {
+		lines = append(lines, "Nutrition: "+formatNutritionSummary(*shop.Nutrition))
+	}
+	lines = append(lines, "", "Selected products:")
 	for _, selected := range shop.SelectedProducts {
 		if selected.Error != "" {
 			lines = append(lines, fmt.Sprintf("- %s: ERROR %s", selected.Ingredient.Name, selected.Error))
@@ -227,6 +234,9 @@ func recipeSummaryLines(recipe Recipe) []string {
 	if len(recipe.Tags) > 0 {
 		lines = append(lines, "Tags: "+strings.Join(recipe.Tags, ", "))
 	}
+	if recipe.NutritionPerServing != nil {
+		lines = append(lines, "Nutrition per serving: "+formatNutritionSummary(*recipe.NutritionPerServing))
+	}
 	lines = append(lines, "Ingredients:")
 	for _, ing := range recipe.Ingredients {
 		lines = append(lines, fmt.Sprintf("- %s: %.3g %s", ing.Name, ing.Quantity, ing.Unit))
@@ -248,6 +258,10 @@ func recipeSummaryLines(recipe Recipe) []string {
 		}
 	}
 	return lines
+}
+
+func formatNutritionSummary(summary NutritionSummary) string {
+	return fmt.Sprintf("%.0f kcal, %.1fg protein, %.1fg carbs, %.1fg fat", summary.Kcal, summary.ProteinG, summary.CarbsG, summary.FatG)
 }
 
 type pdfElement struct {

@@ -3,6 +3,8 @@ package food
 import (
 	"fmt"
 	"strings"
+
+	"alcampo-cli/internal/strutil"
 )
 
 func CookMealPlan(plan MealPlan, pantry Pantry, note string, rating int) (Pantry, CookResult) {
@@ -28,7 +30,7 @@ func CookMealPlan(plan MealPlan, pantry Pantry, note string, rating int) (Pantry
 }
 
 func applyPantryUsage(p Pantry, usage PantryUsage) (Pantry, PantryUsage, bool) {
-	name := firstNonEmpty(usage.PantryItem, usage.Ingredient)
+	name := strutil.FirstNonEmpty(usage.PantryItem, usage.Ingredient)
 	unit := normalizeUnit(usage.Unit)
 	if strings.TrimSpace(name) == "" || usage.Quantity <= 0 {
 		return p, PantryUsage{}, false
@@ -54,7 +56,7 @@ func applyPantryUsage(p Pantry, usage PantryUsage) (Pantry, PantryUsage, bool) {
 			Ingredient: usage.Ingredient,
 			PantryItem: item.Name,
 			Quantity:   used,
-			Unit:       firstNonEmpty(usage.Unit, item.Unit),
+			Unit:       strutil.FirstNonEmpty(usage.Unit, item.Unit),
 			Location:   item.Location,
 		}
 		if p.Items[i].Quantity == 0 {
@@ -71,7 +73,7 @@ func recipeFeedbackFromPlan(plan MealPlan) []RecipeFeedback {
 	for _, day := range plan.Days {
 		for _, meal := range day.Meals {
 			recipe := meal.Recipe
-			key := normalizeKey(firstNonEmpty(recipe.ID, recipe.Title))
+			key := normalizeKey(strutil.FirstNonEmpty(recipe.ID, recipe.Title))
 			if key == "" || seen[key] {
 				continue
 			}

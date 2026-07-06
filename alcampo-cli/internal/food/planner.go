@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"alcampo-cli/internal/strutil"
 )
 
 type PlanOptions struct {
@@ -27,9 +29,13 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 	if len(opts.MealTypes) == 0 {
 		opts.MealTypes = []string{"dinner"}
 	}
-	budget := firstNonEmpty(opts.BudgetEUR, profile.BudgetEUR)
+	budget := strutil.FirstNonEmpty(opts.BudgetEUR, profile.BudgetEUR)
 
-	templates := rankRecipeTemplates(filterTemplates(recipeTemplates(), profile), profile, pantry)
+	recipes, err := LoadRecipes()
+	if err != nil {
+		return MealPlan{}, err
+	}
+	templates := rankRecipeTemplates(filterTemplates(recipes, profile), profile, pantry)
 	if len(templates) == 0 {
 		return MealPlan{}, fmt.Errorf("no recipe templates fit the current allergy/dislike profile")
 	}
@@ -48,7 +54,7 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 		for _, mealType := range opts.MealTypes {
 			template := templates[recipeIndex%len(templates)]
 			recipeIndex++
-			recipe := scaleRecipe(template, opts.People)
+			recipe := withNutrition(scaleRecipe(template, opts.People))
 			dp.Meals = append(dp.Meals, Meal{
 				Type:           strings.TrimSpace(mealType),
 				Recipe:         recipe,
@@ -66,8 +72,13 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 	if len(plan.PantryUsage) > 0 {
 		plan.Notes = append(plan.Notes, "Pantry and fridge items were deducted before building the shopping list.")
 	}
+	plan.Notes = append(plan.Notes, expiringPlanNotes(pantry, plan.PantryUsage, 3)...)
 	if profile.SelectionPolicy == "" {
 		plan.Notes = append(plan.Notes, "No product selection policy is saved yet; set one before shopping this plan.")
+	}
+	if summary := SummarizePlan(plan); !nutritionIsZero(summary) {
+		plan.Nutrition = &summary
+		plan.Notes = append(plan.Notes, NutritionGoalWarnings(summary, profile.NutritionGoals)...)
 	}
 	return plan, nil
 }
@@ -180,37 +191,41 @@ func daysUntilExpiry(expiry string) (int, bool) {
 	return int(day.Sub(today).Hours() / 24), true
 }
 
-func GenerateRecipe(prompt string, profile Profile, people int) Recipe {
+func GenerateRecipe(prompt string, profile Profile, people int) (Recipe, error) {
 	if people <= 0 {
 		people = profile.People
 	}
 	if people <= 0 {
 		people = 2
 	}
+	recipes, err := LoadRecipes()
+	if err != nil {
+		return Recipe{}, err
+	}
 	promptKey := normalizeKey(prompt)
-	templates := filterTemplates(recipeTemplates(), profile)
+	templates := filterTemplates(recipes, profile)
 	if len(templates) == 0 {
-		templates = recipeTemplates()
+		templates = recipes
 	}
 	for _, template := range templates {
 		text := normalizeKey(template.Title + " " + strings.Join(template.Tags, " "))
 		if promptKey != "" && (strings.Contains(text, promptKey) || strings.Contains(promptKey, normalizeKey(template.Title))) {
-			return scaleRecipe(template, people)
+			return withNutrition(scaleRecipe(template, people)), nil
 		}
 	}
 	if strings.Contains(promptKey, "pasta") {
-		return scaleRecipe(templateByID("vegetable-pasta"), people)
+		return withNutrition(scaleRecipe(templateByID(recipes, "vegetable-pasta"), people)), nil
 	}
 	if strings.Contains(promptKey, "lent") || strings.Contains(promptKey, "guiso") {
-		return scaleRecipe(templateByID("lentil-stew"), people)
+		return withNutrition(scaleRecipe(templateByID(recipes, "lentil-stew"), people)), nil
 	}
 	if strings.Contains(promptKey, "tortilla") || strings.Contains(promptKey, "egg") || strings.Contains(promptKey, "huevo") {
-		return scaleRecipe(templateByID("spanish-tortilla"), people)
+		return withNutrition(scaleRecipe(templateByID(recipes, "spanish-tortilla"), people)), nil
 	}
 	if strings.Contains(promptKey, "fish") || strings.Contains(promptKey, "salmon") || strings.Contains(promptKey, "pescado") {
-		return scaleRecipe(templateByID("salmon-potatoes"), people)
+		return withNutrition(scaleRecipe(templateByID(recipes, "salmon-potatoes"), people)), nil
 	}
-	return scaleRecipe(templates[0], people)
+	return withNutrition(scaleRecipe(templates[0], people)), nil
 }
 
 func filterTemplates(templates []Recipe, profile Profile) []Recipe {
@@ -298,124 +313,23 @@ func scaleRecipe(recipe Recipe, servings int) Recipe {
 	return recipe
 }
 
-func templateByID(id string) Recipe {
-	for _, recipe := range recipeTemplates() {
+func withNutrition(recipe Recipe) Recipe {
+	summary, err := SummarizeNutrition(recipe)
+	if err != nil {
+		return recipe
+	}
+	recipe.NutritionPerServing = &summary
+	return recipe
+}
+
+func templateByID(recipes []Recipe, id string) Recipe {
+	for _, recipe := range recipes {
 		if recipe.ID == id {
 			return recipe
 		}
 	}
-	return recipeTemplates()[0]
-}
-
-func recipeTemplates() []Recipe {
-	return []Recipe{
-		{
-			ID:          "mediterranean-chicken-rice",
-			Title:       "Mediterranean Chicken Rice",
-			Servings:    2,
-			PrepMinutes: 15,
-			CookMinutes: 30,
-			Tags:        []string{"balanced", "mediterranean", "high protein"},
-			Ingredients: []Ingredient{
-				{Name: "chicken breast", Quantity: 350, Unit: "g", Category: "meat", SearchTerm: "pechuga de pollo"},
-				{Name: "rice", Quantity: 180, Unit: "g", Category: "pantry", SearchTerm: "arroz"},
-				{Name: "red pepper", Quantity: 1, Unit: "unit", Category: "vegetables", SearchTerm: "pimiento rojo"},
-				{Name: "tomato", Quantity: 2, Unit: "unit", Category: "vegetables", SearchTerm: "tomate"},
-				{Name: "onion", Quantity: 1, Unit: "unit", Category: "vegetables", SearchTerm: "cebolla"},
-			},
-			Equipment: []string{"large pan", "knife", "cutting board"},
-			Steps: []RecipeStep{
-				{Number: 1, Title: "Prep", Text: "Dice the onion, pepper, and tomatoes. Cut the chicken into bite-size pieces.", Minutes: 10},
-				{Number: 2, Title: "Brown", Text: "Brown the chicken with a little oil, then add onion and pepper until softened.", Minutes: 10},
-				{Number: 3, Title: "Simmer", Text: "Add rice, tomato, salt, and water. Simmer covered until the rice is tender.", Minutes: 20},
-			},
-			Substitutions: []string{"Use turkey breast instead of chicken.", "Use frozen vegetable mix if fresh peppers are unavailable."},
-		},
-		{
-			ID:          "vegetable-pasta",
-			Title:       "Vegetable Pasta With Tomato Sauce",
-			Servings:    2,
-			PrepMinutes: 10,
-			CookMinutes: 20,
-			Tags:        []string{"vegetarian", "quick", "family"},
-			Ingredients: []Ingredient{
-				{Name: "pasta", Quantity: 200, Unit: "g", Category: "pantry", SearchTerm: "pasta"},
-				{Name: "tomato sauce", Quantity: 250, Unit: "g", Category: "pantry", SearchTerm: "tomate frito"},
-				{Name: "zucchini", Quantity: 1, Unit: "unit", Category: "vegetables", SearchTerm: "calabacin"},
-				{Name: "mushrooms", Quantity: 200, Unit: "g", Category: "vegetables", SearchTerm: "champiñones"},
-				{Name: "grated cheese", Quantity: 80, Unit: "g", Category: "dairy", SearchTerm: "queso rallado", Optional: true},
-			},
-			Equipment: []string{"pot", "pan", "colander"},
-			Steps: []RecipeStep{
-				{Number: 1, Title: "Cook pasta", Text: "Cook pasta in salted boiling water until al dente.", Minutes: 10},
-				{Number: 2, Title: "Cook vegetables", Text: "Saute sliced zucchini and mushrooms until browned.", Minutes: 8},
-				{Number: 3, Title: "Finish", Text: "Combine pasta, vegetables, and tomato sauce. Top with cheese if using.", Minutes: 4},
-			},
-			Substitutions: []string{"Skip cheese for a lighter or vegan version.", "Use whole wheat pasta for more fiber."},
-		},
-		{
-			ID:          "lentil-stew",
-			Title:       "Lentil And Vegetable Stew",
-			Servings:    2,
-			PrepMinutes: 10,
-			CookMinutes: 35,
-			Tags:        []string{"vegetarian", "budget", "batch cooking"},
-			Ingredients: []Ingredient{
-				{Name: "lentils", Quantity: 200, Unit: "g", Category: "pantry", SearchTerm: "lentejas"},
-				{Name: "carrot", Quantity: 2, Unit: "unit", Category: "vegetables", SearchTerm: "zanahoria"},
-				{Name: "potato", Quantity: 2, Unit: "unit", Category: "vegetables", SearchTerm: "patata"},
-				{Name: "onion", Quantity: 1, Unit: "unit", Category: "vegetables", SearchTerm: "cebolla"},
-				{Name: "vegetable stock", Quantity: 1, Unit: "unit", Category: "pantry", SearchTerm: "caldo verduras"},
-			},
-			Equipment: []string{"soup pot", "knife", "ladle"},
-			Steps: []RecipeStep{
-				{Number: 1, Title: "Prep vegetables", Text: "Dice the onion, carrots, and potatoes.", Minutes: 10},
-				{Number: 2, Title: "Build base", Text: "Saute onion, then add vegetables, lentils, stock, and water.", Minutes: 10},
-				{Number: 3, Title: "Simmer", Text: "Simmer until lentils and potatoes are tender. Adjust seasoning.", Minutes: 30},
-			},
-			Substitutions: []string{"Use chickpeas when lentils are unavailable.", "Add spinach at the end for extra greens."},
-		},
-		{
-			ID:          "spanish-tortilla",
-			Title:       "Spanish Tortilla With Salad",
-			Servings:    2,
-			PrepMinutes: 15,
-			CookMinutes: 25,
-			Tags:        []string{"vegetarian", "spanish", "classic"},
-			Ingredients: []Ingredient{
-				{Name: "eggs", Quantity: 4, Unit: "unit", Category: "eggs", SearchTerm: "huevos"},
-				{Name: "potato", Quantity: 3, Unit: "unit", Category: "vegetables", SearchTerm: "patata"},
-				{Name: "onion", Quantity: 1, Unit: "unit", Category: "vegetables", SearchTerm: "cebolla"},
-				{Name: "mixed salad", Quantity: 1, Unit: "unit", Category: "vegetables", SearchTerm: "ensalada"},
-			},
-			Equipment: []string{"nonstick pan", "bowl", "plate"},
-			Steps: []RecipeStep{
-				{Number: 1, Title: "Cook potatoes", Text: "Slice potatoes and onion thinly. Cook gently in oil until tender.", Minutes: 18},
-				{Number: 2, Title: "Mix", Text: "Beat eggs, fold in potatoes and onion, and season.", Minutes: 5},
-				{Number: 3, Title: "Set", Text: "Cook in a nonstick pan until just set, flipping carefully with a plate.", Minutes: 10},
-			},
-			Substitutions: []string{"Serve with tomatoes if bagged salad is unavailable."},
-		},
-		{
-			ID:          "salmon-potatoes",
-			Title:       "Salmon With Potatoes And Green Beans",
-			Servings:    2,
-			PrepMinutes: 10,
-			CookMinutes: 25,
-			Tags:        []string{"quality", "fish", "high protein"},
-			Ingredients: []Ingredient{
-				{Name: "salmon fillets", Quantity: 2, Unit: "unit", Category: "fish", SearchTerm: "salmon"},
-				{Name: "potato", Quantity: 3, Unit: "unit", Category: "vegetables", SearchTerm: "patata"},
-				{Name: "green beans", Quantity: 250, Unit: "g", Category: "vegetables", SearchTerm: "judias verdes"},
-				{Name: "lemon", Quantity: 1, Unit: "unit", Category: "fruit", SearchTerm: "limon"},
-			},
-			Equipment: []string{"oven tray", "pot", "knife"},
-			Steps: []RecipeStep{
-				{Number: 1, Title: "Roast potatoes", Text: "Cut potatoes and roast with oil and salt until nearly tender.", Minutes: 20},
-				{Number: 2, Title: "Add salmon", Text: "Place salmon on the tray with lemon and roast until cooked.", Minutes: 10},
-				{Number: 3, Title: "Serve", Text: "Boil or steam green beans and serve with the salmon and potatoes.", Minutes: 8},
-			},
-			Substitutions: []string{"Use hake or cod if salmon is unavailable."},
-		},
+	if len(recipes) == 0 {
+		return Recipe{}
 	}
+	return recipes[0]
 }

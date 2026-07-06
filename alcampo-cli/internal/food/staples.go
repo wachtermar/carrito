@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"alcampo-cli/internal/strutil"
 )
 
 func AddOrUpdateStaple(profile Profile, staple Staple) (Profile, Staple, error) {
@@ -62,8 +64,8 @@ func StapleRestockIngredients(profile Profile, pantry Pantry) []Ingredient {
 			Name:       staple.Name,
 			Quantity:   missing,
 			Unit:       unit,
-			Category:   firstNonEmpty(staple.Category, "staple"),
-			SearchTerm: firstNonEmpty(staple.SearchTerm, staple.Name),
+			Category:   strutil.FirstNonEmpty(staple.Category, "staple"),
+			SearchTerm: strutil.FirstNonEmpty(staple.SearchTerm, staple.Name),
 		})
 	}
 	return mergeIngredients(needs)
@@ -73,7 +75,7 @@ func pantryQuantityForStaple(staple Staple, pantry Pantry) float64 {
 	unit := normalizeUnit(staple.Unit)
 	total := 0.0
 	for _, item := range pantry.Items {
-		if !namesMatch(staple.Name, item.Name) && !namesMatch(firstNonEmpty(staple.SearchTerm, staple.Name), item.Name) {
+		if !namesMatch(staple.Name, item.Name) && !namesMatch(strutil.FirstNonEmpty(staple.SearchTerm, staple.Name), item.Name) {
 			continue
 		}
 		if unit != "" && item.Unit != "" && normalizeUnit(item.Unit) != unit {

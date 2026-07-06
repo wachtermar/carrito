@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"alcampo-cli/internal/food"
 )
@@ -42,6 +43,136 @@ func TestFoodProfileSetRemembersSelectionPolicy(t *testing.T) {
 	}
 	if len(profile.RejectedRecipes) != 1 || profile.RejectedRecipes[0] != "lentil-stew" {
 		t.Fatalf("rejected recipes not saved: %+v", profile)
+	}
+}
+
+func TestFoodRecipesAddShowListRemove(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	recipe := food.Recipe{
+		ID:       "cli-test-recipe",
+		Title:    "CLI Test Recipe",
+		Servings: 2,
+		Tags:     []string{"cli-test"},
+		Ingredients: []food.Ingredient{
+			{Name: "rice", Quantity: 100, Unit: "g", SearchTerm: "arroz"},
+		},
+		Steps: []food.RecipeStep{{Number: 1, Text: "Cook rice."}},
+	}
+	data, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(t.TempDir(), "recipe.json")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "recipes", "add", input, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("add Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "show", "cli-test-recipe", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("show Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var shown food.Recipe
+	if err := json.Unmarshal(stdout.Bytes(), &shown); err != nil {
+		t.Fatal(err)
+	}
+	if shown.ID != recipe.ID {
+		t.Fatalf("shown recipe = %+v", shown)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "list", "--tag", "cli-test", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("list Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var listed []food.Recipe
+	if err := json.Unmarshal(stdout.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != recipe.ID {
+		t.Fatalf("listed recipes = %+v", listed)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "remove", "cli-test-recipe", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("remove Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+}
+
+func TestFoodRecipesAddFromText(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	input := filepath.Join(t.TempDir(), "recipe.txt")
+	if err := os.WriteFile(input, []byte("2 pechugas de pollo, 1 cebolla, 200 g arroz"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "recipes", "add", input, "--from-text", "--title", "Pollo rapido", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var result struct {
+		Recipes []food.Recipe `json:"recipes"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Recipes) != 1 || result.Recipes[0].ID != "pollo-rapido" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	loaded, ok, err := food.LoadRecipe("pollo-rapido")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || loaded.Title != "Pollo rapido" {
+		t.Fatalf("text recipe not saved: ok=%t recipe=%+v", ok, loaded)
+	}
+}
+
+func TestFoodUseUpCommandReturnsSuggestions(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	expiry := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	if err := food.SavePantry(food.Pantry{Items: []food.PantryItem{
+		{Name: "eggs", Quantity: 4, Unit: "unit", Location: "fridge", ExpiryDate: expiry},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "use-up", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var suggestions []food.UseUpSuggestion
+	if err := json.Unmarshal(stdout.Bytes(), &suggestions); err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) == 0 || suggestions[0].Recipe.ID != "spanish-tortilla" {
+		t.Fatalf("unexpected suggestions: %+v", suggestions)
+	}
+}
+
+func TestFoodImportReceiptCommand(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	input := filepath.Join(t.TempDir(), "receipt.txt")
+	if err := os.WriteFile(input, []byte("2 leche entera 1,80\nArroz redondo 1 kg 2,10\nTOTAL 3,90\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "import-receipt", "--file", input, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var result food.PantryImportResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Applied) != 2 {
+		t.Fatalf("unexpected import result: %+v", result)
+	}
+	pantry, err := food.LoadPantry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pantry.Items) != 2 {
+		t.Fatalf("pantry not saved: %+v", pantry)
 	}
 }
 

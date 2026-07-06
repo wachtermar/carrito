@@ -29,3 +29,5 @@ The root `SKILL.md` exists for OpenClaw Git installs. The portable skill package
 ## CLI source
 
 The Go CLI lives in `alcampo-cli/`. See `alcampo-cli/README.md` for command examples, auth handling, food memory, and development notes.
+
+The food planner now uses an embedded plus user-editable JSON recipe library. Add or override recipes under `~/.alcampo/food/recipes/*.json`, or use `alcampo food recipes add <file|->` and `alcampo food recipes add <file|-> --from-text` for pasted ingredient lists. Receipt/order imports, use-up planning for expiring pantry items, and nutrition summaries are documented in the CLI README.
