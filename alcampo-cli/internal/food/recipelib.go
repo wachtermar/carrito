@@ -6,10 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"unicode"
 )
@@ -25,37 +22,20 @@ func RecipesDir() (string, error) {
 	return filepath.Join(dir, "recipes"), nil
 }
 
+func RecipeDBPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "recipes.db"), nil
+}
+
 func LoadRecipes() ([]Recipe, error) {
-	var recipes []Recipe
-	index := map[string]int{}
-	if err := loadSeedRecipes(&recipes, index); err != nil {
-		return nil, err
-	}
-	if err := loadUserRecipes(&recipes, index); err != nil {
-		return nil, err
-	}
-	if len(recipes) == 0 {
-		return nil, errors.New("recipe library is empty")
-	}
-	return recipes, nil
+	return SearchRecipes(RecipeQuery{})
 }
 
 func LoadRecipe(idOrTitle string) (Recipe, bool, error) {
-	key := normalizeKey(idOrTitle)
-	idKey := recipeIDKey(idOrTitle)
-	if key == "" && idKey == "" {
-		return Recipe{}, false, nil
-	}
-	recipes, err := LoadRecipes()
-	if err != nil {
-		return Recipe{}, false, err
-	}
-	for _, recipe := range recipes {
-		if recipeIDKey(recipe.ID) == idKey || normalizeKey(recipe.ID) == key || normalizeKey(recipe.Title) == key {
-			return recipe, true, nil
-		}
-	}
-	return Recipe{}, false, nil
+	return loadRecipeFromDB(idOrTitle)
 }
 
 func DecodeRecipes(data []byte) ([]Recipe, error) {
@@ -89,53 +69,11 @@ func SaveUserRecipe(recipe Recipe) (string, error) {
 	if err := ValidateRecipe(recipe); err != nil {
 		return "", err
 	}
-	dir, err := RecipesDir()
-	if err != nil {
-		return "", err
-	}
-	path := filepath.Join(dir, recipeFileName(recipe.ID))
-	return path, writeJSONFile(path, recipe)
+	return saveUserRecipeToDB(recipe)
 }
 
 func RemoveUserRecipe(id string) (bool, error) {
-	dir, err := RecipesDir()
-	if err != nil {
-		return false, err
-	}
-	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
-	if err != nil {
-		return false, err
-	}
-	sort.Strings(paths)
-	target := recipeIDKey(id)
-	for _, path := range paths {
-		recipes, isArray, err := readRecipeFile(path, func() ([]byte, error) {
-			return os.ReadFile(path)
-		})
-		if err != nil {
-			return false, err
-		}
-		var kept []Recipe
-		removed := false
-		for _, recipe := range recipes {
-			if recipeIDKey(recipe.ID) == target || normalizeKey(recipe.Title) == normalizeKey(id) {
-				removed = true
-				continue
-			}
-			kept = append(kept, recipe)
-		}
-		if !removed {
-			continue
-		}
-		if len(kept) == 0 {
-			return true, os.Remove(path)
-		}
-		if isArray {
-			return true, writeJSONFile(path, kept)
-		}
-		return false, fmt.Errorf("cannot remove %q from %s without removing the only recipe", id, path)
-	}
-	return false, nil
+	return removeUserRecipeFromDB(id)
 }
 
 func ValidateRecipe(recipe Recipe) error {
@@ -166,46 +104,6 @@ func ValidateRecipe(recipe Recipe) error {
 		if strings.TrimSpace(step.Text) == "" {
 			return fmt.Errorf("recipe %q step %d text is required", recipe.ID, i+1)
 		}
-	}
-	return nil
-}
-
-func loadSeedRecipes(recipes *[]Recipe, index map[string]int) error {
-	paths, err := fs.Glob(seedRecipeFS, "recipes/seed/*.json")
-	if err != nil {
-		return err
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		loaded, _, err := readRecipeFile(path, func() ([]byte, error) {
-			return seedRecipeFS.ReadFile(path)
-		})
-		if err != nil {
-			return err
-		}
-		mergeRecipes(recipes, index, loaded)
-	}
-	return nil
-}
-
-func loadUserRecipes(recipes *[]Recipe, index map[string]int) error {
-	dir, err := RecipesDir()
-	if err != nil {
-		return err
-	}
-	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
-	if err != nil {
-		return err
-	}
-	sort.Strings(paths)
-	for _, path := range paths {
-		loaded, _, err := readRecipeFile(path, func() ([]byte, error) {
-			return os.ReadFile(path)
-		})
-		if err != nil {
-			return err
-		}
-		mergeRecipes(recipes, index, loaded)
 	}
 	return nil
 }

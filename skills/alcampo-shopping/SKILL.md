@@ -42,7 +42,7 @@ Resolve `{baseDir}` as the directory containing this `SKILL.md`.
    - `alcampo food profile get --json`
    - `alcampo food pantry list --json`
    - `alcampo food staples list --json`
-   - `alcampo food recipes list --json` when the user asks what meals are available or wants custom recipe work.
+   - `alcampo food recipes list --json` or `alcampo food recipes search <query> --profile --json` when the user asks what meals are available or wants custom recipe work.
    - `alcampo food profile set --selection-policy balanced|cheapest|quality` if no policy is saved.
 7. Use `alcampo food pantry list --expiring-days 3 --json` and `alcampo food use-up --json` when the user wants to reduce waste or use expiring items.
 8. For low-intervention planning and shopping, prefer `alcampo food run --days <n> --people <n> --meals dinner --selection-policy <policy> --basket-out basket.txt --json`.
@@ -61,13 +61,13 @@ Load `{baseDir}/references/food-agent-playbook.md` for detailed autonomous meal-
 
 ## Food Memory
 
-Food memory is local JSON under `ALCAMPO_CONFIG_DIR/food/` or `~/.alcampo/food/`:
+Food memory is local data under `ALCAMPO_CONFIG_DIR/food/` or `~/.alcampo/food/`:
 
 - `profile.json`: household size, diets, allergies, dislikes, liked cuisines, liked/rejected recipes, liked/rejected products, budget, preferred/rejected brands, and persistent `selection_policy`.
 - `profile.json` can store free-form `nutrition_goals` such as `kcal<=2200` or `protein>=90`; meal plans add warning notes when computed totals miss them.
 - `profile.json` also stores repeat `staples` with minimum quantities so low-stock essentials can be added automatically.
 - `pantry.json`: pantry/fridge/freezer items, quantities, units, locations, expiry dates, confidence, and last checked timestamps.
-- `recipes/*.json`: user recipe objects or arrays. User recipe ids override embedded seed recipes.
+- `recipes.db`: SQLite recipe database with normalized recipe, tag, ingredient, step, nutrition, and full-text search tables. Embedded seed recipes are loaded automatically, custom recipes added through the CLI override seed ids, and legacy `recipes/*.json` files are imported once for migration.
 - `mealplans/*.json`: saved meal plans with recipes, pantry usage, required purchases, and notes.
 - `history.jsonl`: append-only cooked plans, ratings, pantry updates, substitutions, and rejected products.
 

@@ -77,6 +77,8 @@ alcampo food use-up --expiring-days 3 --limit 8 --json
 alcampo food recipe "quick vegetarian pasta" --people 2 --json --out recipe.json
 alcampo food recipe <mealplan-id-or-file> --json --out recipes.json
 alcampo food recipes list --tag quick --json
+alcampo food recipes list --query chickpea --diet vegan --limit 5 --json
+alcampo food recipes search "quick rice" --profile --json
 alcampo food recipes show spanish-tortilla --json
 alcampo food recipes add recipe.json --json
 printf '2 pechugas de pollo, 1 cebolla, 200 g arroz' | alcampo food recipes add - --from-text --title "Pollo rapido" --json
@@ -93,7 +95,7 @@ alcampo food history list --limit 20 --json
 
 `food run` is the preferred low-intervention path: it loads profile and pantry memory, generates the meal plan, subtracts pantry/fridge items, shops the remaining ingredients, optionally writes a PDF, and returns one JSON object.
 
-Recipe library behavior: embedded seed recipes are always available, and user JSON recipes live under `ALCAMPO_CONFIG_DIR/food/recipes/*.json` or `~/.alcampo/food/recipes/*.json`. Files may contain one recipe object or an array. User recipes with the same `id` override seed recipes. `food recipes add --from-text` parses comma- or newline-separated ingredient lists and auto-derives Spanish search terms.
+Recipe library behavior: embedded seed recipes are always available, and the editable library lives in the SQLite database at `ALCAMPO_CONFIG_DIR/food/recipes.db` or `~/.alcampo/food/recipes.db`. The database stores normalized recipe, tag, ingredient, equipment, step, substitution, allergen-note, nutrition, and full-text search tables. User recipes added through `food recipes add` override seed recipes with the same `id`. Legacy `food/recipes/*.json` files are imported once into SQLite for migration, but new recipes should be added through the CLI. `food recipes add --from-text` parses comma- or newline-separated ingredient lists and auto-derives Spanish search terms. `food recipes search <query> --profile` applies saved profile diets, allergies, and dislikes.
 
 Nutrition behavior: recipes may include `nutrition_per_serving`, and generated meal plans/shopping results include a `nutrition` total when estimates are available. `food profile set --nutrition-goals "kcal<=2200,protein>=90"` stores free-form goals; plans add warning notes when totals miss parseable goals.
 

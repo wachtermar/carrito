@@ -49,7 +49,7 @@ printf '54178 2\n205192 1\n' > basket.txt
 ./alcampo total -f basket.txt --json
 ```
 
-Food planning stores transparent local JSON under `ALCAMPO_CONFIG_DIR/food/` or `~/.alcampo/food/`:
+Food planning stores local memory under `ALCAMPO_CONFIG_DIR/food/` or `~/.alcampo/food/`. Recipe data lives in SQLite at `food/recipes.db`; profile, pantry, meal plan, and history files remain transparent JSON/JSONL:
 
 ```sh
 ./alcampo food profile set --people 2 --selection-policy balanced --budget 80 --json
@@ -59,6 +59,8 @@ Food planning stores transparent local JSON under `ALCAMPO_CONFIG_DIR/food/` or 
 ./alcampo food pantry list --expiring-days 3 --json
 ./alcampo food use-up --expiring-days 3 --json
 ./alcampo food recipes list --tag quick --json
+./alcampo food recipes list --query chickpea --diet vegan --limit 5 --json
+./alcampo food recipes search "quick rice" --profile --json
 ./alcampo food recipes show spanish-tortilla --json
 printf '2 pechugas de pollo, 1 cebolla, 200 g arroz' | ./alcampo food recipes add - --from-text --title "Pollo rapido" --json
 ./alcampo food run --days 3 --people 2 --meals dinner --selection-policy balanced --basket-out basket.txt --json
@@ -75,7 +77,7 @@ printf '2 pechugas de pollo, 1 cebolla, 200 g arroz' | ./alcampo food recipes ad
 
 `food run` is the low-intervention path from profile/pantry to meal plan to shopped Alcampo products. `food plan` ranks meals using pantry/fridge matches, expiring items, liked cuisines, liked recipes, and rejected recipes, then adds low-stock staples from `profile.json`. Meal plans and recipes include estimated nutrition summaries when available, and saved `--nutrition-goals` can add warning notes. `food use-up` ranks recipes that consume pantry items expiring soon. `food shop` uses the saved `selection_policy` from `profile.json`, or a `--selection-policy balanced|cheapest|quality` override that is remembered, and respects liked/rejected product memory. It returns selected product images, offers, prices, grouped shopping sections with subtotals, package-count calculations, reasons, alternates, basket lines, nutrition, and an estimated total before any cart mutation. `--basket-out basket.txt` writes the guarded cart-prep file directly. After the user confirms purchase or delivery, `food receive` imports a saved shop/run JSON into pantry memory. `food import-receipt` parses plain-text receipts into pantry items, while `food import-orders` best-effort imports past Alcampo order lines from an authenticated session. `food cook` updates pantry quantities, appends cooking history, learns liked recipes from high ratings, and learns rejected recipes from low ratings.
 
-The editable recipe library is loaded from embedded seed recipes plus user JSON files in `~/.alcampo/food/recipes/*.json` or `ALCAMPO_CONFIG_DIR/food/recipes/*.json`. User recipes with the same `id` override embedded seeds. Files may contain one recipe object or an array of recipes.
+The editable recipe library is stored in `~/.alcampo/food/recipes.db` or `ALCAMPO_CONFIG_DIR/food/recipes.db`. The database has normalized recipe, tag, ingredient, equipment, step, substitution, allergen-note, nutrition, and FTS tables so large libraries can be searched and filtered without scanning per-recipe files. Embedded seed recipes are inserted automatically, and user recipes with the same `id` override embedded seeds. Legacy JSON files in `food/recipes/*.json` are imported once into SQLite for migration; new custom recipes should be added with `food recipes add`.
 
 With an imported Alcampo web session:
 

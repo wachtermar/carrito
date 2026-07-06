@@ -408,12 +408,14 @@ func runFoodRecipe(args []string, stdout, stderr io.Writer) error {
 
 func runFoodRecipes(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Fprintln(stdout, "usage: alcampo food recipes <list|show|add|remove> [options]")
+		fmt.Fprintln(stdout, "usage: alcampo food recipes <list|search|show|add|remove> [options]")
 		return nil
 	}
 	switch args[0] {
 	case "list":
 		return runFoodRecipesList(args[1:], stdout, stderr)
+	case "search":
+		return runFoodRecipesSearch(args[1:], stdout, stderr)
 	case "show":
 		return runFoodRecipesShow(args[1:], stdout, stderr)
 	case "add":
@@ -427,17 +429,24 @@ func runFoodRecipes(args []string, stdout, stderr io.Writer) error {
 
 func runFoodRecipesList(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food recipes list", stderr)
-	tag := fs.String("tag", "", "filter by recipe tag")
+	tag := fs.String("tag", "", "comma-separated recipe tags")
+	query := fs.String("query", "", "full-text recipe search query")
+	diet := fs.String("diet", "", "comma-separated diet tags to require")
+	allergy := fs.String("allergy", "", "comma-separated allergies to exclude")
+	dislike := fs.String("dislike", "", "comma-separated disliked ingredients to exclude")
+	useProfile := fs.Bool("profile", false, "apply saved profile diets, allergies, and dislikes")
+	limit := fs.Int("limit", 0, "maximum recipes to return")
 	jsonOut := fs.Bool("json", false, "write JSON to stdout")
-	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+	if err := parseInterspersed(fs, args, map[string]bool{"profile": true, "json": true}); err != nil {
 		return err
 	}
-	recipes, err := food.LoadRecipes()
+	recipeQuery, err := buildRecipeQuery(*query, *tag, *diet, *allergy, *dislike, *useProfile, *limit)
 	if err != nil {
 		return err
 	}
-	if *tag != "" {
-		recipes = filterRecipesByTag(recipes, *tag)
+	recipes, err := food.SearchRecipes(recipeQuery)
+	if err != nil {
+		return err
 	}
 	if *jsonOut {
 		return output.JSON(stdout, recipes)
@@ -446,6 +455,67 @@ func runFoodRecipesList(args []string, stdout, stderr io.Writer) error {
 		printRecipeSummary(stdout, recipe)
 	}
 	return nil
+}
+
+func runFoodRecipesSearch(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food recipes search", stderr)
+	tag := fs.String("tag", "", "comma-separated recipe tags")
+	diet := fs.String("diet", "", "comma-separated diet tags to require")
+	allergy := fs.String("allergy", "", "comma-separated allergies to exclude")
+	dislike := fs.String("dislike", "", "comma-separated disliked ingredients to exclude")
+	useProfile := fs.Bool("profile", false, "apply saved profile diets, allergies, and dislikes")
+	limit := fs.Int("limit", 20, "maximum recipes to return")
+	jsonOut := fs.Bool("json", false, "write JSON to stdout")
+	if err := parseInterspersed(fs, args, map[string]bool{"profile": true, "json": true}); err != nil {
+		return err
+	}
+	query := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	if query == "" {
+		return errors.New("food recipes search requires a query")
+	}
+	recipeQuery, err := buildRecipeQuery(query, *tag, *diet, *allergy, *dislike, *useProfile, *limit)
+	if err != nil {
+		return err
+	}
+	recipes, err := food.SearchRecipes(recipeQuery)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return output.JSON(stdout, recipes)
+	}
+	for _, recipe := range recipes {
+		printRecipeSummary(stdout, recipe)
+	}
+	return nil
+}
+
+func buildRecipeQuery(query, tag, diet, allergy, dislike string, useProfile bool, limit int) (food.RecipeQuery, error) {
+	recipeQuery := food.RecipeQuery{
+		Query:     query,
+		Tags:      splitList(tag),
+		Diets:     splitList(diet),
+		Allergies: splitList(allergy),
+		Dislikes:  splitList(dislike),
+		Limit:     limit,
+	}
+	if useProfile {
+		profile, err := food.LoadProfile()
+		if err != nil {
+			return recipeQuery, err
+		}
+		recipeQuery.Diets = appendUniqueValues(recipeQuery.Diets, profile.Diets...)
+		recipeQuery.Allergies = appendUniqueValues(recipeQuery.Allergies, profile.Allergies...)
+		recipeQuery.Dislikes = appendUniqueValues(recipeQuery.Dislikes, profile.Dislikes...)
+	}
+	return recipeQuery, nil
+}
+
+func appendUniqueValues(values []string, additions ...string) []string {
+	for _, value := range additions {
+		values = appendUnique(values, value)
+	}
+	return values
 }
 
 func runFoodRecipesShow(args []string, stdout, stderr io.Writer) error {

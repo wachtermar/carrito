@@ -34,7 +34,11 @@ func SuggestUseUpRecipes(profile Profile, pantry Pantry, days, limit int) ([]Use
 	if len(expiring) == 0 {
 		return nil, nil
 	}
-	recipes, err := LoadRecipes()
+	recipes, err := SearchRecipes(RecipeQuery{
+		Diets:     profile.Diets,
+		Allergies: profile.Allergies,
+		Dislikes:  profile.Dislikes,
+	})
 	if err != nil {
 		return nil, err
 	}

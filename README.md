@@ -30,4 +30,4 @@ The root `SKILL.md` exists for OpenClaw Git installs. The portable skill package
 
 The Go CLI lives in `alcampo-cli/`. See `alcampo-cli/README.md` for command examples, auth handling, food memory, and development notes.
 
-The food planner now uses an embedded plus user-editable JSON recipe library. Add or override recipes under `~/.alcampo/food/recipes/*.json`, or use `alcampo food recipes add <file|->` and `alcampo food recipes add <file|-> --from-text` for pasted ingredient lists. Receipt/order imports, use-up planning for expiring pantry items, and nutrition summaries are documented in the CLI README.
+The food planner now uses a local SQLite recipe database at `~/.alcampo/food/recipes.db` or `ALCAMPO_CONFIG_DIR/food/recipes.db`. Use `alcampo food recipes add <file|->` or `alcampo food recipes add <file|-> --from-text` for custom recipes; legacy `food/recipes/*.json` files are imported once into SQLite for migration. Receipt/order imports, use-up planning for expiring pantry items, and nutrition summaries are documented in the CLI README.

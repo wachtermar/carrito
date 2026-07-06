@@ -31,7 +31,11 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 	}
 	budget := strutil.FirstNonEmpty(opts.BudgetEUR, profile.BudgetEUR)
 
-	recipes, err := LoadRecipes()
+	recipes, err := SearchRecipes(RecipeQuery{
+		Diets:     profile.Diets,
+		Allergies: profile.Allergies,
+		Dislikes:  profile.Dislikes,
+	})
 	if err != nil {
 		return MealPlan{}, err
 	}
@@ -198,7 +202,11 @@ func GenerateRecipe(prompt string, profile Profile, people int) (Recipe, error) 
 	if people <= 0 {
 		people = 2
 	}
-	recipes, err := LoadRecipes()
+	recipes, err := SearchRecipes(RecipeQuery{
+		Diets:     profile.Diets,
+		Allergies: profile.Allergies,
+		Dislikes:  profile.Dislikes,
+	})
 	if err != nil {
 		return Recipe{}, err
 	}
@@ -206,6 +214,25 @@ func GenerateRecipe(prompt string, profile Profile, people int) (Recipe, error) 
 	templates := filterTemplates(recipes, profile)
 	if len(templates) == 0 {
 		templates = recipes
+	}
+	if len(templates) == 0 {
+		return Recipe{}, fmt.Errorf("no recipe templates fit the current allergy/dislike profile")
+	}
+	if promptKey != "" {
+		matches, err := SearchRecipes(RecipeQuery{
+			Query:     prompt,
+			Diets:     profile.Diets,
+			Allergies: profile.Allergies,
+			Dislikes:  profile.Dislikes,
+			Limit:     20,
+		})
+		if err != nil {
+			return Recipe{}, err
+		}
+		matches = filterTemplates(matches, profile)
+		if len(matches) > 0 {
+			return withNutrition(scaleRecipe(matches[0], people)), nil
+		}
 	}
 	for _, template := range templates {
 		text := normalizeKey(template.Title + " " + strings.Join(template.Tags, " "))

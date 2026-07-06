@@ -129,6 +129,33 @@ func TestFoodRecipesAddFromText(t *testing.T) {
 	}
 }
 
+func TestFoodRecipesSearchAppliesProfileFilters(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	if err := food.SaveProfile(food.Profile{Diets: []string{"vegan"}, Allergies: []string{"fish"}}); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "recipes", "search", "chickpea", "--profile", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var recipes []food.Recipe
+	if err := json.Unmarshal(stdout.Bytes(), &recipes); err != nil {
+		t.Fatal(err)
+	}
+	if len(recipes) == 0 {
+		t.Fatal("expected profile-compatible recipes")
+	}
+	for _, recipe := range recipes {
+		text := strings.ToLower(strings.Join(append([]string{recipe.ID, recipe.Title}, recipe.Tags...), " "))
+		if !strings.Contains(text, "vegan") {
+			t.Fatalf("non-vegan recipe returned: %+v", recipe)
+		}
+		if strings.Contains(text, "fish") {
+			t.Fatalf("fish recipe returned despite profile allergy: %+v", recipe)
+		}
+	}
+}
+
 func TestFoodUseUpCommandReturnsSuggestions(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	expiry := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
