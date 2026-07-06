@@ -72,7 +72,8 @@ type CartSetManyResult struct {
 func runCartGet(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("cart get", stderr)
 	jsonOut := fs.Bool("json", false, "write JSON to stdout")
-	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+	rawOut := fs.Bool("raw", false, "with --json, write the raw Alcampo cart response")
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true, "raw": true}); err != nil {
 		return err
 	}
 	_, client, err := newClient("")
@@ -84,15 +85,34 @@ func runCartGet(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if *jsonOut {
+		if *rawOut {
+			return output.JSON(stdout, cart)
+		}
+		summary, err := enrichedCartSummary(context.Background(), client, cart)
+		if err != nil {
+			return err
+		}
+		return output.JSON(stdout, summary)
+	}
+	if *rawOut {
 		return output.JSON(stdout, cart)
 	}
-	total, ok := alcampo.CartTotalCents(cart)
-	if ok {
-		fmt.Fprintf(stdout, "items=%d\ttotal=%s\n", alcampo.CartItemCount(cart), money.Format(total, "EUR"))
-		return nil
+	summary, err := enrichedCartSummary(context.Background(), client, cart)
+	if err != nil {
+		return err
 	}
-	fmt.Fprintf(stdout, "items=%d\ttotal=unknown\n", alcampo.CartItemCount(cart))
+	printCartSummary(stdout, summary)
 	return nil
+}
+
+func enrichedCartSummary(ctx context.Context, client *alcampo.Client, cart any) (alcampo.CartSummary, error) {
+	summary := alcampo.SummarizeCart(cart, client.BaseURL)
+	products, err := client.DecorateProducts(ctx, alcampo.CartSummaryProductIDs(summary))
+	if err != nil {
+		return summary, err
+	}
+	alcampo.EnrichCartSummary(&summary, products)
+	return summary, nil
 }
 
 func runCartAdd(args []string, stdout, stderr io.Writer) error {

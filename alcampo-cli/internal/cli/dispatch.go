@@ -39,6 +39,8 @@ func Run(args []string, stdout, stderr io.Writer) error {
 		return runImportCurl(args, stdout, stderr)
 	case "login":
 		return runLogin(args, stdout, stderr)
+	case "login-web":
+		return runLoginWeb(args, stdout, stderr)
 	case "whoami":
 		return runWhoami(args, stdout, stderr)
 	case "cart":
@@ -70,8 +72,9 @@ func printHelp(w io.Writer) {
 	fmt.Fprintln(w, "  alcampo import-curl --file <curl-file|->")
 	fmt.Fprintln(w, "  alcampo import-curl --clipboard")
 	fmt.Fprintln(w, "  alcampo login --username <email> [--password-stdin] [--json]")
+	fmt.Fprintln(w, "  alcampo login-web [--if-needed] [--json] [--no-open]")
 	fmt.Fprintln(w, "  alcampo whoami [--json]")
-	fmt.Fprintln(w, "  alcampo cart get [--json]")
+	fmt.Fprintln(w, "  alcampo cart get [--json] [--raw]")
 	fmt.Fprintln(w, "  alcampo cart add <product_id_or_sku> <qty> --max EUR")
 	fmt.Fprintln(w, "  alcampo cart set <product_id_or_sku> <qty> --max EUR")
 	fmt.Fprintln(w, "  alcampo cart set-many -f <basket-file|-> --max EUR")

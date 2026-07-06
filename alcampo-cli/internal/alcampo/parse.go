@@ -58,7 +58,7 @@ func productFromMap(m map[string]any, baseURL string) Product {
 		SKU:         stringFromKeys(m, "retailerProductId", "sku", "retailerSku"),
 		Name:        stringFromKeys(m, "name", "displayName", "productName", "title"),
 		Brand:       brandFrom(m["brand"]),
-		Size:        stringFromKeys(m, "size", "format", "packSize", "netContent"),
+		Size:        stringFromKeys(m, "size", "format", "packSize", "packSizeDescription", "netContent"),
 		EAN:         stringFromKeys(m, "ean", "gtin", "gtin13"),
 		Description: stripHTML(stringFromKeys(m, "description", "shortDescription")),
 	}

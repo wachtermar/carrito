@@ -76,7 +76,13 @@ Useful query parameters:
 
 ## Product Details
 
-Direct product decoration exists in the web bundles as a `PUT /api/webproductpagews/v6/products?regionId=...` style call, but direct shell requests returned `403` during testing, even with anonymous cookies and web-app-like headers. The CLI does not depend on that endpoint.
+Direct product decoration works with the same web-app style headers used by the CLI:
+
+```text
+PUT /api/webproductpagews/v6/products?regionId=<uuid>
+```
+
+The JSON body is an array of internal `productId` strings. The response includes `products[]` with internal product id, retailer product id/SKU, name, brand, pack size, price, unit/reference price, image URLs/srcsets, availability, and basket quantity when applicable. The CLI uses this after cart reads because the active cart view can return only internal product ids, prices, quantities, and totals.
 
 The public product page works for retailer product ids:
 
@@ -231,5 +237,7 @@ The CLI implements cart get/add/set/set-many/clear through the active-cart and a
   {"productId": "<internalProductId>", "quantity": 1}
 ]
 ```
+
+`cart get` reads `cart-view`, then decorates the returned internal product ids through `PUT /api/webproductpagews/v6/products?regionId=...` so agents can show names, SKUs, images, unit prices, quantities, line totals, product URLs, and offers instead of raw cart ids.
 
 All cart and checkout writes require logged-in/imported cookies or bearer token, CSRF token, verified active cart total, and a nonzero spending guard. Checkout payment and order submission are not implemented.

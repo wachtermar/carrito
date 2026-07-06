@@ -24,7 +24,12 @@ script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 skill_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 bin_dir="${ALCAMPO_BIN_DIR:-$HOME/.local/bin}"
 source_arg="${ALCAMPO_CLI_SOURCE:-}"
+source_marker="$skill_dir/.alcampo-cli-source"
 tmp_dir=""
+
+if [ -z "$source_arg" ] && [ -f "$source_marker" ]; then
+  source_arg="$(sed -n '1p' "$source_marker")"
+fi
 
 cleanup() {
   if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then

@@ -14,7 +14,7 @@ From the repository root:
 ./install-skill.sh
 ```
 
-That copies the skill into `~/.hermes/skills/alcampo-shopping` and `~/.openclaw/skills/alcampo-shopping`, then builds `alcampo` into `~/.local/bin`.
+That copies the skill into `~/.hermes/skills/alcampo-shopping` and `~/.openclaw/skills/alcampo-shopping`, builds `alcampo` into `~/.local/bin`, then runs `alcampo login-web --if-needed` so desktop users can authenticate in a browser when no session exists. Use `./install-skill.sh --no-login` or `ALCAMPO_INSTALL_LOGIN=0 ./install-skill.sh` to skip the login check.
 
 After publishing this repository, use:
 
@@ -162,12 +162,13 @@ The CLI never accepts passwords as flags and never stores the password. Direct l
 
 ```sh
 ./alcampo login --username you@example.com
+./alcampo login-web --if-needed
 printf '%s\n' "$ALCAMPO_PASSWORD" | ./alcampo login --username "$ALCAMPO_USERNAME" --password-stdin
 ALCAMPO_USERNAME=you@example.com ./alcampo login --json
 ./alcampo whoami --json
 ```
 
-The first form prompts for the password without echo when run in an interactive terminal. For automation, use `ALCAMPO_PASSWORD` from the runner secret manager or pipe it with `--password-stdin`.
+`login-web --if-needed` starts a temporary `127.0.0.1` browser form only when no session exists, opens it automatically, uses the entered password once, and shuts down after the session is saved. This works well from desktop agents because the credential fields live in the user's browser rather than the chat or terminal transcript. The terminal `login` form prompts for the password without echo when run interactively. For automation, use `ALCAMPO_PASSWORD` from the runner secret manager or pipe it with `--password-stdin`.
 
 Session import remains available:
 
@@ -209,6 +210,7 @@ Supported with a logged-in or imported session:
 
 ```sh
 ./alcampo cart get --json
+./alcampo cart get --json --raw
 ./alcampo cart add <product_id_or_sku> <qty> --max <eur>
 ./alcampo cart set <product_id_or_sku> <qty> --max <eur>
 ./alcampo cart set-many -f basket.txt --max <eur>
@@ -218,6 +220,8 @@ Supported with a logged-in or imported session:
 ./alcampo checkout create --max <eur>
 ./alcampo checkout select-slot --slot <slot_id> --max <eur>
 ```
+
+`cart get --json` returns a normalized cart summary for agents: item count, total, and line items with product id/SKU, name, brand, quantity, package price, unit price, line total, size, category, product URL, image URLs, offers, and availability. Use `cart get --json --raw` only when debugging Alcampo private-API response drift.
 
 `checkout slots` prints slot ids in human output. Use one of those ids with `checkout select-slot` to reserve the slot for the configured delivery address and market.
 

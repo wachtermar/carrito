@@ -72,6 +72,102 @@ func TestApplyCartQuantityPostsDelta(t *testing.T) {
 	}
 }
 
+func TestSummarizeCartIncludesLineDetails(t *testing.T) {
+	root := map[string]any{
+		"totals": map[string]any{
+			"display": map[string]any{
+				"itemPriceAfterPromos": map[string]any{"amount": "6.50", "currency": "EUR"},
+			},
+		},
+		"groups": []any{
+			map[string]any{
+				"items": []any{
+					map[string]any{
+						"quantity":  json.Number("2"),
+						"lineTotal": map[string]any{"amount": "6.50", "currency": "EUR"},
+						"product": map[string]any{
+							"productId":         "product-eggs",
+							"retailerProductId": "947535",
+							"name":              "Free range eggs",
+							"brand":             "TEST",
+							"size":              "12 uds",
+							"price":             map[string]any{"amount": "3.25", "currency": "EUR"},
+							"unitPrice":         map[string]any{"amount": "0.27", "currency": "EUR", "unit": "unit"},
+							"images":            []any{"/images/eggs.jpg"},
+							"promotions": []any{
+								map[string]any{"name": "Second unit discount"},
+							},
+							"available": true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	summary := SummarizeCart(root, "https://example.test")
+	if summary.ItemCount != 1 || summary.Total.Cents != 650 {
+		t.Fatalf("unexpected summary totals: %+v", summary)
+	}
+	if len(summary.Items) != 1 {
+		t.Fatalf("items = %d", len(summary.Items))
+	}
+	item := summary.Items[0]
+	if item.SKU != "947535" || item.ProductID != "product-eggs" || item.Name != "Free range eggs" || item.Quantity != "2" {
+		t.Fatalf("unexpected item identity: %+v", item)
+	}
+	if item.Price.Cents != 325 || item.UnitPrice.Cents != 27 || item.LineTotal.Cents != 650 {
+		t.Fatalf("unexpected item prices: %+v", item)
+	}
+	if item.ImageURL != "https://example.test/images/eggs.jpg" || len(item.Offers) != 1 || item.Offers[0].Name != "Second unit discount" {
+		t.Fatalf("missing image or offer: %+v", item)
+	}
+}
+
+func TestCartRetriesTransientServerError(t *testing.T) {
+	var calls int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html></html>`))
+		case "/api/cart/v2/carts/active/cart-view":
+			calls++
+			if calls == 1 {
+				http.Error(w, "temporary failure", http.StatusInternalServerError)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"totals": map[string]any{
+					"display": map[string]any{
+						"itemPriceAfterPromos": map[string]any{"amount": "3.25", "currency": "EUR"},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(config.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.BaseURL = server.URL
+	root, err := client.Cart(context.Background(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("cart calls = %d", calls)
+	}
+	total, ok := CartTotalCents(root)
+	if !ok || total != 325 {
+		t.Fatalf("total = %d, %t", total, ok)
+	}
+}
+
 func TestReserveSlotPostsDiscoveredBody(t *testing.T) {
 	var sawRequest bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

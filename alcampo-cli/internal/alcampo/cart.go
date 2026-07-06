@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"alcampo-cli/internal/httpx"
 	"alcampo-cli/internal/money"
 )
 
@@ -26,10 +28,28 @@ func (c *Client) Cart(ctx context.Context, view bool) (any, error) {
 		path = "/api/cart/v2/carts/active/cart-view"
 		q.Set("productGroupingType", "CATEGORIES")
 	}
-	if err := c.getJSON(ctx, path, q, c.BaseURL+"/basket", "basket", &root); err != nil {
+	if err := retryTransient(func() error {
+		return c.getJSON(ctx, path, q, c.BaseURL+"/basket", "basket", &root)
+	}); err != nil {
 		return nil, err
 	}
 	return root, nil
+}
+
+func (c *Client) DecorateProducts(ctx context.Context, productIDs []string) ([]Product, error) {
+	ids := uniqueNonEmpty(productIDs)
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q := url.Values{}
+	q.Set("regionId", c.RegionID)
+	var root any
+	if err := retryTransient(func() error {
+		return c.putJSON(ctx, "/api/webproductpagews/v6/products?"+q.Encode(), ids, c.BaseURL+"/basket", "basket", &root)
+	}); err != nil {
+		return nil, err
+	}
+	return collectProducts(root, c.BaseURL), nil
 }
 
 func (c *Client) ApplyCartQuantity(ctx context.Context, items []CartQuantityChange) (any, error) {
@@ -46,6 +66,47 @@ func (c *Client) ClearCart(ctx context.Context) (any, error) {
 		return nil, err
 	}
 	return root, nil
+}
+
+func uniqueNonEmpty(values []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func retryTransient(fn func() error) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+		if !isTransientStatus(err) || attempt == 2 {
+			return err
+		}
+		time.Sleep(time.Duration(attempt+1) * 250 * time.Millisecond)
+	}
+	return err
+}
+
+func isTransientStatus(err error) bool {
+	var statusErr *httpx.StatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode == 429 || statusErr.StatusCode >= 500
+	}
+	return false
 }
 
 func CartTotalCents(root any) (int64, bool) {

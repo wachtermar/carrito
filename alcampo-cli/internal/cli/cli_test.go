@@ -90,6 +90,92 @@ func TestCartAddUsesImportedSessionAndMarket(t *testing.T) {
 	}
 }
 
+func TestCartGetReturnsNormalizedSummary(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html></html>`))
+		case "/api/cart/v2/carts/active/cart-view":
+			if got := r.URL.Query().Get("productGroupingType"); got != "CATEGORIES" {
+				t.Fatalf("productGroupingType = %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(cartWithItem())
+		case "/api/webproductpagews/v6/products":
+			if r.Method != http.MethodPut {
+				t.Fatalf("method = %s", r.Method)
+			}
+			if got := r.URL.Query().Get("regionId"); got != "region-home" {
+				t.Fatalf("regionId = %q", got)
+			}
+			var ids []string
+			if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+				t.Fatal(err)
+			}
+			if len(ids) != 1 || ids[0] != "product-eggs" {
+				t.Fatalf("unexpected decoration ids: %#v", ids)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"products": []any{
+					map[string]any{
+						"productId":           "product-eggs",
+						"retailerProductId":   "947535",
+						"name":                "Free range eggs",
+						"brand":               "TEST",
+						"packSizeDescription": "12 uds",
+						"unitPrice":           map[string]any{"price": map[string]any{"amount": "0.27", "currency": "EUR"}, "unit": "fop.price.per.unit"},
+						"image":               map[string]any{"src": "/images/eggs.jpg"},
+						"available":           true,
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	writeTestConfig(t, "region-home", "dest-home")
+	t.Setenv("ALCAMPO_BASE_URL", server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"cart", "get", "--json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var result struct {
+		ItemCount int `json:"item_count"`
+		Total     struct {
+			Cents int64 `json:"cents"`
+		} `json:"total"`
+		Items []struct {
+			SKU      string `json:"sku"`
+			Name     string `json:"name"`
+			Quantity string `json:"quantity"`
+			ImageURL string `json:"image_url"`
+			Price    struct {
+				Cents int64 `json:"cents"`
+			} `json:"price"`
+			LineTotal struct {
+				Cents int64 `json:"cents"`
+			} `json:"line_total"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if result.ItemCount != 1 || result.Total.Cents != 650 || len(result.Items) != 1 {
+		t.Fatalf("unexpected summary: %+v", result)
+	}
+	item := result.Items[0]
+	if item.SKU != "947535" || item.Name != "Free range eggs" || item.Quantity != "2" || item.Price.Cents != 325 || item.LineTotal.Cents != 650 {
+		t.Fatalf("unexpected item: %+v", item)
+	}
+	if item.ImageURL != server.URL+"/images/eggs.jpg" {
+		t.Fatalf("image URL = %q", item.ImageURL)
+	}
+}
+
 func TestCheckoutSelectSlotVerifiesSlotAndReserves(t *testing.T) {
 	var slotsBody map[string]any
 	var reserveBody map[string]any
@@ -288,4 +374,21 @@ func cartWithTotal(amount string) map[string]any {
 			},
 		},
 	}
+}
+
+func cartWithItem() map[string]any {
+	root := cartWithTotal("6.50")
+	root["groups"] = []any{
+		map[string]any{
+			"items": []any{
+				map[string]any{
+					"quantity":  json.Number("2"),
+					"productId": "product-eggs",
+					"price":     map[string]any{"amount": "3.25", "currency": "EUR"},
+					"lineTotal": map[string]any{"amount": "6.50", "currency": "EUR"},
+				},
+			},
+		},
+	}
+	return root
 }

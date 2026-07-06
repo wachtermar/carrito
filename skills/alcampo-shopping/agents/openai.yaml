@@ -1,4 +1,4 @@
 interface:
   display_name: "Alcampo Food Shopping"
-  short_description: "Plan meals and shop Alcampo Spain"
-  default_prompt: "Use $alcampo-shopping to run a pantry- and staples-aware meal plan, select Alcampo products with offers/images/quantities/reasons, receive delivered shops into pantry, then update pantry/history after cooking."
+  short_description: "View carts, plan meals, and shop Alcampo Spain"
+  default_prompt: "Use $alcampo-shopping to show my Alcampo cart with images, quantities, prices, line totals, offers, and product URLs; or run a pantry- and staples-aware meal plan, select Alcampo products with offers/images/quantities/reasons, receive delivered shops into pantry, then update pantry/history after cooking."

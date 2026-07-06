@@ -70,6 +70,42 @@ func printStaples(w io.Writer, staples []food.Staple) {
 	}
 }
 
+func printCartSummary(w io.Writer, summary alcampo.CartSummary) {
+	total := formatMoney(summary.Total)
+	if total == "-" {
+		total = "unknown"
+	}
+	fmt.Fprintf(w, "cart\titems=%d\ttotal=%s\n", summary.ItemCount, total)
+	if len(summary.Items) == 0 {
+		return
+	}
+	for _, item := range summary.Items {
+		fmt.Fprintf(w, "%s\tqty=%s\tprice=%s\tline_total=%s\t%s\n",
+			strutil.FirstNonEmpty(item.SKU, item.ProductID, "-"),
+			item.Quantity,
+			formatMoney(item.Price),
+			formatMoney(item.LineTotal),
+			strutil.FirstNonEmpty(item.Name, "-"),
+		)
+		if item.ImageURL != "" {
+			fmt.Fprintf(w, "  image\t%s\n", item.ImageURL)
+		}
+		if item.UnitPrice.Amount != "" {
+			unit := item.Unit
+			if unit == "" {
+				unit = "-"
+			}
+			fmt.Fprintf(w, "  unit_price\t%s/%s\n", formatMoney(item.UnitPrice), unit)
+		}
+		if item.Size != "" {
+			fmt.Fprintf(w, "  size\t%s\n", item.Size)
+		}
+		for _, offer := range item.Offers {
+			fmt.Fprintf(w, "  offer\t%s\n", strutil.FirstNonEmpty(offer.Name, offer.Description, offer.ID, "-"))
+		}
+	}
+}
+
 func printMealPlan(w io.Writer, plan food.MealPlan) {
 	fmt.Fprintf(w, "mealplan\t%s\tpeople=%d\tfile=%s\n", plan.ID, plan.People, strutil.FirstNonEmpty(plan.File, "-"))
 	if plan.Nutrition != nil {

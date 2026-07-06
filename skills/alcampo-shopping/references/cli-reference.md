@@ -150,11 +150,14 @@ Direct login from secrets:
 
 ```bash
 export ALCAMPO_CONFIG_DIR="$PWD/.alcampo-agent"
+alcampo login-web --if-needed --json
 printf '%s\n' "$ALCAMPO_PASSWORD" | alcampo login --username "$ALCAMPO_USERNAME" --password-stdin
 alcampo addresses --json
 alcampo set-address <delivery_destination_id>
 alcampo whoami --json
 ```
+
+Use `alcampo login-web --if-needed --json` for Hermes Desktop or other GUI agent surfaces. It checks the local config first, then starts a temporary `127.0.0.1` browser form only when no session exists. The password is submitted only to the local CLI process, used once for login, and not printed or stored. Use `--no-open` only for headless terminals where you want to copy the local URL manually.
 
 Stored auth material may include cookies, bearer tokens, CSRF tokens, customer or visitor ids, delivery-destination ids, and location hints. Config files with secrets should be mode `0600`.
 
@@ -164,6 +167,7 @@ Supported authenticated commands:
 
 ```bash
 alcampo cart get --json
+alcampo cart get --json --raw
 alcampo cart add <product_id_or_sku> <qty> --max <eur> --json
 alcampo cart set <product_id_or_sku> <qty> --max <eur> --json
 alcampo cart set-many -f basket.txt --max <eur> --json
@@ -173,6 +177,8 @@ alcampo checkout slots --json
 alcampo checkout create --max <eur> --json
 alcampo checkout select-slot --slot <slot_id> --max <eur> --json
 ```
+
+`cart get --json` returns a normalized agent-readable cart summary: item count, total, and line items with product id/SKU, name, brand, quantity, package price, unit price, line total, size, category, product URL, image URLs, offers, and availability. Use `cart get --json --raw` only when troubleshooting private-API response drift.
 
 All writes require an authenticated/imported session, CSRF token, verified active cart total, and nonzero spending guard. The guard can be `--max <eur>`, `ALCAMPO_MAX_EUR`, or `[limits] max_eur` in config.
 

@@ -1,6 +1,6 @@
 ---
 name: alcampo-shopping
-description: "Use alcampo-cli for Alcampo Spain meal planning, recipes, pantry-aware shopping, product search, basket totals, cart checks, and guarded checkout slot workflows."
+description: "Use alcampo-cli for Alcampo Spain cart viewing with images/prices/quantities, meal planning, recipes, pantry-aware shopping, product search, basket totals, and guarded checkout slot workflows."
 license: MIT
 metadata:
   openclaw:
