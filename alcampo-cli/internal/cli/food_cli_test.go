@@ -46,6 +46,36 @@ func TestFoodProfileSetRemembersSelectionPolicy(t *testing.T) {
 	}
 }
 
+func TestFoodPlanRequiresPeopleWhenProfileMissing(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"food", "plan", "--days", "1", "--json"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected missing people count error; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(err.Error(), "people count is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNestedHelpReturnsSuccess(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "plan", "--help"}, &stdout, &stderr); err != nil {
+		t.Fatalf("help returned error: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage of food plan") {
+		t.Fatalf("missing flag usage on stderr: %s", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "profile", "set", "--help"}, &stdout, &stderr); err != nil {
+		t.Fatalf("profile help returned error: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Usage of food profile set") {
+		t.Fatalf("missing profile usage on stderr: %s", stderr.String())
+	}
+}
+
 func TestFoodRecipesAddShowListRemove(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	recipe := food.Recipe{
@@ -357,8 +387,10 @@ func TestFoodShopRejectsRememberedProduct(t *testing.T) {
 	if len(result.SelectedProducts) != 1 || result.SelectedProducts[0].Product.SKU != "333" {
 		t.Fatalf("remembered rejection was not applied: %+v", result)
 	}
-	if len(result.SelectedProducts[0].Alternates) == 0 || result.SelectedProducts[0].Alternates[0].RejectedReason != "matches rejected product memory" {
-		t.Fatalf("rejected alternate not explained: %+v", result.SelectedProducts[0])
+	for _, alternate := range result.SelectedProducts[0].Alternates {
+		if alternate.RejectedReason != "" {
+			t.Fatalf("rejected alternate leaked into compatible choices: %+v", result.SelectedProducts[0])
+		}
 	}
 }
 

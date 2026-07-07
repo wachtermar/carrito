@@ -24,7 +24,7 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 		opts.People = profile.People
 	}
 	if opts.People <= 0 {
-		opts.People = 2
+		return MealPlan{}, fmt.Errorf("people count is required; pass --people or save one with 'alcampo food profile set --people <n>'")
 	}
 	if len(opts.MealTypes) == 0 {
 		opts.MealTypes = []string{"dinner"}
@@ -52,15 +52,18 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 	}
 
 	var required []Ingredient
-	recipeIndex := 0
+	recipeIndexes := make(map[string]int)
 	for day := 1; day <= opts.Days; day++ {
 		dp := DayPlan{Day: day, Label: fmt.Sprintf("Day %d", day)}
 		for _, mealType := range opts.MealTypes {
-			template := templates[recipeIndex%len(templates)]
-			recipeIndex++
+			trimmedMealType := strings.TrimSpace(mealType)
+			candidates := templatesForMealType(templates, trimmedMealType)
+			mealKey := normalizeMealType(trimmedMealType)
+			template := candidates[recipeIndexes[mealKey]%len(candidates)]
+			recipeIndexes[mealKey]++
 			recipe := withNutrition(scaleRecipe(template, opts.People))
 			dp.Meals = append(dp.Meals, Meal{
-				Type:           strings.TrimSpace(mealType),
+				Type:           trimmedMealType,
 				Recipe:         recipe,
 				PlanningReason: planningReason(template, profile, pantry),
 			})
@@ -85,6 +88,39 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 		plan.Notes = append(plan.Notes, NutritionGoalWarnings(summary, profile.NutritionGoals)...)
 	}
 	return plan, nil
+}
+
+func templatesForMealType(templates []Recipe, mealType string) []Recipe {
+	mealKey := normalizeMealType(mealType)
+	if mealKey == "" {
+		return templates
+	}
+	var out []Recipe
+	for _, recipe := range templates {
+		for _, tag := range recipe.Tags {
+			if normalizeMealType(tag) == mealKey {
+				out = append(out, recipe)
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return templates
+	}
+	return out
+}
+
+func normalizeMealType(value string) string {
+	switch normalizeKey(value) {
+	case "breakfast", "desayuno":
+		return "breakfast"
+	case "lunch", "comida", "almuerzo":
+		return "lunch"
+	case "dinner", "cena":
+		return "dinner"
+	default:
+		return normalizeKey(value)
+	}
 }
 
 func rankRecipeTemplates(templates []Recipe, profile Profile, pantry Pantry) []Recipe {
@@ -296,11 +332,11 @@ func fitsDiets(recipe Recipe, diets []string) bool {
 	for _, diet := range diets {
 		switch normalizeKey(diet) {
 		case "vegetarian", "vegetariano", "vegetariana":
-			if strings.Contains(text, "chicken") || strings.Contains(text, "salmon") || strings.Contains(text, "turkey") || strings.Contains(text, "pollo") {
+			if containsAnyKey(text, vegetarianForbiddenKeys) {
 				return false
 			}
 		case "vegan", "vegano", "vegana":
-			if strings.Contains(text, "chicken") || strings.Contains(text, "salmon") || strings.Contains(text, "turkey") || strings.Contains(text, "egg") || strings.Contains(text, "cheese") || strings.Contains(text, "yogurt") || strings.Contains(text, "pollo") {
+			if containsAnyKey(veganDietText(text), append(vegetarianForbiddenKeys, veganForbiddenKeys...)) {
 				return false
 			}
 		}
@@ -308,14 +344,70 @@ func fitsDiets(recipe Recipe, diets []string) bool {
 	return true
 }
 
-func containsAny(text string, values []string) bool {
-	for _, value := range values {
-		key := normalizeKey(value)
-		if key != "" && strings.Contains(text, key) {
+var vegetarianForbiddenKeys = []string{
+	"beef", "chicken", "cod", "fish", "hake", "ham", "meat", "pork", "salmon", "seafood", "shellfish", "shrimp", "tuna", "turkey",
+	"atun", "bacalao", "carne", "cerdo", "gamba", "gambas", "jamon", "marisco", "merluza", "pavo", "pescado", "pollo", "ternera",
+}
+
+var veganForbiddenKeys = []string{
+	"butter", "cheese", "cream", "dairy", "egg", "eggs", "honey", "milk", "yogurt", "yoghurt",
+	"huevo", "huevos", "leche", "mantequilla", "miel", "nata", "queso",
+}
+
+func containsAnyKey(text string, keys []string) bool {
+	for _, key := range keys {
+		if containsNormalizedTerm(text, key) {
 			return true
 		}
 	}
 	return false
+}
+
+func veganDietText(text string) string {
+	for _, allowed := range []string{
+		"almond milk", "coconut milk", "oat milk", "plant milk", "rice milk", "soy milk",
+		"leche de almendra", "leche de arroz", "leche de avena", "leche de coco", "leche de soja", "leche vegetal",
+	} {
+		text = strings.ReplaceAll(text, allowed, "")
+	}
+	return text
+}
+
+func containsAny(text string, values []string) bool {
+	for _, value := range values {
+		if containsNormalizedTerm(text, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsNormalizedTerm(text, term string) bool {
+	text = normalizeKey(text)
+	term = normalizeKey(term)
+	if text == "" || term == "" {
+		return false
+	}
+	if strings.Contains(term, " ") {
+		return strings.Contains(" "+text+" ", " "+term+" ")
+	}
+	for _, token := range strings.Fields(text) {
+		if token == term || singularToken(token) == singularToken(term) {
+			return true
+		}
+	}
+	return false
+}
+
+func singularToken(token string) string {
+	token = strings.TrimSpace(token)
+	if len(token) > 4 && strings.HasSuffix(token, "es") {
+		return strings.TrimSuffix(token, "es")
+	}
+	if len(token) > 3 && strings.HasSuffix(token, "s") {
+		return strings.TrimSuffix(token, "s")
+	}
+	return token
 }
 
 func recipeText(recipe Recipe) string {

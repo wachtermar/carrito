@@ -279,7 +279,7 @@ func runFoodPantryUse(args []string, stdout, stderr io.Writer) error {
 func runFoodPlan(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food plan", stderr)
 	days := fs.Int("days", 3, "number of days")
-	people := fs.Int("people", 0, "people count; defaults to profile")
+	people := fs.Int("people", 0, "people count; required unless saved in profile")
 	budget := fs.String("budget", "", "budget in EUR")
 	meals := fs.String("meals", "dinner", "comma-separated meal types")
 	outPath := fs.String("out", "", "optional output JSON path")
@@ -357,7 +357,7 @@ func runFoodUseUp(args []string, stdout, stderr io.Writer) error {
 
 func runFoodRecipe(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food recipe", stderr)
-	people := fs.Int("people", 0, "people count; defaults to profile")
+	people := fs.Int("people", 0, "people count; defaults to profile or 2")
 	outPath := fs.String("out", "", "optional output JSON path")
 	jsonOut := fs.Bool("json", false, "write JSON to stdout")
 	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
@@ -738,7 +738,7 @@ func runFoodPDF(args []string, stdout, stderr io.Writer) error {
 func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food run", stderr)
 	days := fs.Int("days", 3, "number of days")
-	people := fs.Int("people", 0, "people count; defaults to profile")
+	people := fs.Int("people", 0, "people count; required unless saved in profile")
 	budget := fs.String("budget", "", "budget in EUR")
 	meals := fs.String("meals", "dinner", "comma-separated meal types")
 	policy := fs.String("selection-policy", "", "balanced, cheapest, or quality; saved if provided")

@@ -87,8 +87,9 @@ copy_skill() {
   dest="$2"
   mkdir -p "$dest"
   if command -v rsync >/dev/null 2>&1; then
-    rsync -a --exclude '.DS_Store' "$src/" "$dest/"
+    rsync -a --delete --exclude '.DS_Store' "$src/" "$dest/"
   else
+    find "$dest" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
     (cd "$src" && tar cf - .) | (cd "$dest" && tar xf -)
   fi
   printf '%s\n' "$repo_root/alcampo-cli" > "$dest/.alcampo-cli-source"

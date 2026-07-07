@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"io"
 	"strings"
 )
+
+var errHelpRequested = errors.New("help requested")
 
 func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
@@ -19,7 +22,13 @@ func marketFlag(fs *flag.FlagSet, usage string) *string {
 }
 
 func parseInterspersed(fs *flag.FlagSet, args []string, boolFlags map[string]bool) error {
-	return fs.Parse(reorderArgs(args, boolFlags))
+	if err := fs.Parse(reorderArgs(args, boolFlags)); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return errHelpRequested
+		}
+		return err
+	}
+	return nil
 }
 
 func reorderArgs(args []string, boolFlags map[string]bool) []string {

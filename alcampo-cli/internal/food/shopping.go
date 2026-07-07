@@ -53,6 +53,12 @@ func ShopMealPlan(ctx context.Context, client *alcampo.Client, plan MealPlan, pr
 		result.SelectedProducts = append(result.SelectedProducts, selection)
 	}
 	result.EstimatedTotal = money.Money{Amount: money.FormatAmount(result.EstimatedTotal.Cents), Currency: "EUR", Cents: result.EstimatedTotal.Cents}
+	if note, over := budgetStatusNote(plan.BudgetEUR, result.EstimatedTotal); over {
+		result.Complete = false
+		result.Notes = append(result.Notes, note)
+	} else if note != "" {
+		result.Notes = append(result.Notes, note)
+	}
 	result.ShoppingGroups = GroupSelectedProducts(result.SelectedProducts)
 	if len(result.SelectedProducts) == 0 {
 		result.Notes = append(result.Notes, "No required purchases were found; pantry may already cover this plan.")
@@ -131,11 +137,7 @@ func SelectProduct(ingredient Ingredient, products []alcampo.Product, profile Pr
 	})
 	selection := SelectedProduct{Ingredient: ingredient}
 	if len(options) > 1 {
-		limit := len(options)
-		if limit > 5 {
-			limit = 5
-		}
-		selection.Alternates = append(selection.Alternates, options[1:limit]...)
+		selection.Alternates = compatibleAlternates(options[1:], 4)
 	}
 	if options[0].RejectedReason != "" {
 		selection.Alternates = options
@@ -183,6 +185,9 @@ func scoreProduct(ingredient Ingredient, product alcampo.Product, profile Profil
 	}, " "))
 	if product.Available != nil && !*product.Available {
 		return ProductOption{Product: summary, Score: -1000000, RejectedReason: "unavailable in the selected market"}
+	}
+	if reason := productDietRejectedReason(text, profile.Diets); reason != "" {
+		return ProductOption{Product: summary, Score: -1000000, RejectedReason: reason}
 	}
 	if containsAny(text, profile.Allergies) {
 		return ProductOption{Product: summary, Score: -1000000, RejectedReason: "matches saved allergy terms"}
@@ -252,6 +257,54 @@ func scoreProduct(ingredient Ingredient, product alcampo.Product, profile Profil
 		reasons = append(reasons, "balanced value policy")
 	}
 	return ProductOption{Product: summary, Score: roundScore(score), Reason: strings.Join(reasons, "; ")}
+}
+
+func compatibleAlternates(options []ProductOption, limit int) []ProductOption {
+	if limit <= 0 {
+		return nil
+	}
+	var out []ProductOption
+	for _, option := range options {
+		if option.RejectedReason != "" {
+			continue
+		}
+		out = append(out, option)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func productDietRejectedReason(text string, diets []string) string {
+	for _, diet := range diets {
+		switch normalizeKey(diet) {
+		case "vegetarian", "vegetariano", "vegetariana":
+			if containsAnyKey(text, vegetarianForbiddenKeys) {
+				return "conflicts with vegetarian diet"
+			}
+		case "vegan", "vegano", "vegana":
+			if containsAnyKey(veganDietText(text), append(vegetarianForbiddenKeys, veganForbiddenKeys...)) {
+				return "conflicts with vegan diet"
+			}
+		}
+	}
+	return ""
+}
+
+func budgetStatusNote(budgetEUR string, total money.Money) (string, bool) {
+	budgetEUR = strings.TrimSpace(budgetEUR)
+	if budgetEUR == "" || total.Cents <= 0 {
+		return "", false
+	}
+	budgetCents, err := money.ParseCents(budgetEUR)
+	if err != nil || budgetCents <= 0 {
+		return fmt.Sprintf("Budget %q could not be parsed; compare the estimated total manually.", budgetEUR), false
+	}
+	if total.Cents > budgetCents {
+		return fmt.Sprintf("Estimated total %s EUR is above the budget target %s EUR.", money.FormatAmount(total.Cents), money.FormatAmount(budgetCents)), true
+	}
+	return fmt.Sprintf("Estimated total %s EUR is within the budget target %s EUR.", money.FormatAmount(total.Cents), money.FormatAmount(budgetCents)), false
 }
 
 func productMemoryMatches(product alcampo.Product, memories []string) bool {

@@ -1,11 +1,20 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 )
 
 func Run(args []string, stdout, stderr io.Writer) error {
+	err := run(args, stdout, stderr)
+	if errors.Is(err, errHelpRequested) {
+		return nil
+	}
+	return err
+}
+
+func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" || args[0] == "help" {
 		printHelp(stdout)
 		return nil

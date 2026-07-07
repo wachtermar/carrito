@@ -73,6 +73,105 @@ func TestGenerateMealPlanSkipsRejectedRecipes(t *testing.T) {
 	}
 }
 
+func TestGenerateMealPlanMatchesRequestedMealTypes(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	plan, err := GenerateMealPlan(Profile{}, Pantry{}, PlanOptions{Days: 1, People: 1, MealTypes: []string{"breakfast", "lunch", "dinner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meals := plan.Days[0].Meals
+	if len(meals) != 3 {
+		t.Fatalf("meal count = %d, want 3", len(meals))
+	}
+	for _, meal := range meals {
+		if !recipeHasTag(meal.Recipe, meal.Type) {
+			t.Fatalf("%s selected recipe %q with tags %+v", meal.Type, meal.Recipe.ID, meal.Recipe.Tags)
+		}
+	}
+}
+
+func TestGenerateMealPlanRequiresPeopleWhenProfileMissing(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	_, err := GenerateMealPlan(Profile{}, Pantry{}, PlanOptions{Days: 1, MealTypes: []string{"dinner"}})
+	if err == nil {
+		t.Fatal("expected missing people count error")
+	}
+	if !strings.Contains(err.Error(), "people count is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGenerateMealPlanVegetarianExcludesMeatAndFish(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	plan, err := GenerateMealPlan(Profile{Diets: []string{"vegetarian"}}, Pantry{}, PlanOptions{Days: 7, People: 2, MealTypes: []string{"breakfast", "lunch", "dinner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, day := range plan.Days {
+		for _, meal := range day.Meals {
+			text := recipeText(meal.Recipe)
+			if containsAnyKey(text, vegetarianForbiddenKeys) {
+				t.Fatalf("vegetarian plan selected %s recipe %q with tags %+v", meal.Type, meal.Recipe.ID, meal.Recipe.Tags)
+			}
+		}
+	}
+}
+
+func TestGenerateMealPlanVeganMatchesMealTypesAndExcludesAnimalProducts(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	plan, err := GenerateMealPlan(Profile{Diets: []string{"vegan"}}, Pantry{}, PlanOptions{Days: 2, People: 2, MealTypes: []string{"breakfast", "lunch", "dinner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, day := range plan.Days {
+		for _, meal := range day.Meals {
+			if !recipeHasTag(meal.Recipe, meal.Type) {
+				t.Fatalf("%s selected recipe %q with tags %+v", meal.Type, meal.Recipe.ID, meal.Recipe.Tags)
+			}
+			text := recipeText(meal.Recipe)
+			if containsAnyKey(veganDietText(text), append(vegetarianForbiddenKeys, veganForbiddenKeys...)) {
+				t.Fatalf("vegan plan selected %s recipe %q with tags %+v", meal.Type, meal.Recipe.ID, meal.Recipe.Tags)
+			}
+		}
+	}
+}
+
+func TestFitsDietsAllowsVeganPlantMilksButRejectsDairy(t *testing.T) {
+	coconut := Recipe{
+		ID:    "coconut-curry",
+		Title: "Coconut Milk Curry",
+		Tags:  []string{"vegan", "dinner"},
+		Ingredients: []Ingredient{
+			{Name: "coconut milk"},
+			{Name: "chickpeas"},
+		},
+	}
+	if !fitsDiets(coconut, []string{"vegan"}) {
+		t.Fatal("coconut milk should be allowed for vegan recipes")
+	}
+	dairy := Recipe{
+		ID:    "dairy-soup",
+		Title: "Creamy Cheese Soup",
+		Tags:  []string{"vegetarian", "dinner"},
+		Ingredients: []Ingredient{
+			{Name: "milk"},
+			{Name: "cheese"},
+		},
+	}
+	if fitsDiets(dairy, []string{"vegan"}) {
+		t.Fatal("dairy milk and cheese should be rejected for vegan recipes")
+	}
+}
+
+func recipeHasTag(recipe Recipe, tag string) bool {
+	for _, got := range recipe.Tags {
+		if normalizeMealType(got) == normalizeMealType(tag) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestGenerateMealPlanAddsLowStockStaples(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	plan, err := GenerateMealPlan(Profile{
@@ -191,6 +290,74 @@ func TestSelectProductCheapestRejectsUnavailableAndAllergy(t *testing.T) {
 	}
 }
 
+func TestSelectProductRejectsDietConflictsAndHidesRejectedAlternates(t *testing.T) {
+	available := true
+	selection := SelectProduct(Ingredient{Name: "vegetable stock", SearchTerm: "caldo verduras"}, []alcampo.Product{
+		{
+			SKU:       "chicken-stock",
+			Name:      "Caldo casero de pollo y verduras",
+			Price:     money.Money{Amount: "0.50", Currency: "EUR", Cents: 50},
+			UnitPrice: money.Money{Amount: "0.50", Currency: "EUR", Cents: 50},
+			Available: &available,
+		},
+		{
+			SKU:       "vegetable-stock",
+			Name:      "Caldo de verduras",
+			Price:     money.Money{Amount: "1.20", Currency: "EUR", Cents: 120},
+			UnitPrice: money.Money{Amount: "1.20", Currency: "EUR", Cents: 120},
+			Available: &available,
+		},
+		{
+			SKU:       "beef-stock",
+			Name:      "Caldo de carne",
+			Price:     money.Money{Amount: "1.10", Currency: "EUR", Cents: 110},
+			UnitPrice: money.Money{Amount: "1.10", Currency: "EUR", Cents: 110},
+			Available: &available,
+		},
+	}, Profile{Diets: []string{"vegetarian"}}, PolicyCheapest)
+	if selection.Error != "" {
+		t.Fatalf("selection error: %s", selection.Error)
+	}
+	if selection.Product.SKU != "vegetable-stock" {
+		t.Fatalf("selected sku = %q, want vegetable-stock; selection=%+v", selection.Product.SKU, selection)
+	}
+	for _, alternate := range selection.Alternates {
+		if alternate.RejectedReason != "" {
+			t.Fatalf("rejected alternate leaked into compatible choices: %+v", selection.Alternates)
+		}
+		text := normalizeKey(alternate.Product.Name)
+		if containsAnyKey(text, vegetarianForbiddenKeys) {
+			t.Fatalf("diet-conflicting alternate leaked: %+v", alternate)
+		}
+	}
+}
+
+func TestSelectProductRejectsAccentedDietTermsWithoutFalseHamMatch(t *testing.T) {
+	available := true
+	selection := SelectProduct(Ingredient{Name: "vegetables", SearchTerm: "verduras"}, []alcampo.Product{
+		{
+			SKU:       "tuna",
+			Name:      "Verduras con atún",
+			Price:     money.Money{Amount: "0.80", Currency: "EUR", Cents: 80},
+			UnitPrice: money.Money{Amount: "0.80", Currency: "EUR", Cents: 80},
+			Available: &available,
+		},
+		{
+			SKU:       "mushrooms",
+			Name:      "Champiñones laminados",
+			Price:     money.Money{Amount: "1.00", Currency: "EUR", Cents: 100},
+			UnitPrice: money.Money{Amount: "1.00", Currency: "EUR", Cents: 100},
+			Available: &available,
+		},
+	}, Profile{Diets: []string{"vegetarian"}}, PolicyCheapest)
+	if selection.Error != "" {
+		t.Fatalf("selection error: %s", selection.Error)
+	}
+	if selection.Product.SKU != "mushrooms" {
+		t.Fatalf("selected sku = %q, want mushrooms; selection=%+v", selection.Product.SKU, selection)
+	}
+}
+
 func TestSelectProductPrefersGoodOfferAndCalculatesPackages(t *testing.T) {
 	available := true
 	selection := SelectProduct(Ingredient{Name: "rice", Quantity: 900, Unit: "g", SearchTerm: "arroz"}, []alcampo.Product{
@@ -254,6 +421,17 @@ func TestGroupSelectedProductsBuildsCategorySubtotalsAndBasketLines(t *testing.T
 	}
 	if groups[1].Category != "produce" || groups[1].Subtotal.Cents != 130 || groups[1].BasketLines[0] != "tomato-sku 1 # tomato" {
 		t.Fatalf("unexpected second group: %+v", groups[1])
+	}
+}
+
+func TestBudgetStatusNoteMarksOverBudget(t *testing.T) {
+	note, over := budgetStatusNote("1.00", money.Money{Amount: "1.20", Currency: "EUR", Cents: 120})
+	if !over || !strings.Contains(note, "above the budget") {
+		t.Fatalf("over-budget note = %q over=%t", note, over)
+	}
+	note, over = budgetStatusNote("2.00", money.Money{Amount: "1.20", Currency: "EUR", Cents: 120})
+	if over || !strings.Contains(note, "within the budget") {
+		t.Fatalf("within-budget note = %q over=%t", note, over)
 	}
 }
 
@@ -323,8 +501,10 @@ func TestSelectProductUsesLikedAndRejectedProductMemory(t *testing.T) {
 	if !strings.Contains(selection.SelectionReason, "liked product") {
 		t.Fatalf("missing liked product reason: %q", selection.SelectionReason)
 	}
-	if len(selection.Alternates) == 0 || selection.Alternates[0].RejectedReason != "matches rejected product memory" {
-		t.Fatalf("rejected product not explained: %+v", selection.Alternates)
+	for _, alternate := range selection.Alternates {
+		if alternate.RejectedReason != "" {
+			t.Fatalf("rejected product leaked into compatible alternates: %+v", selection.Alternates)
+		}
 	}
 }
 

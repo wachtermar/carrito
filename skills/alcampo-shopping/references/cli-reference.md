@@ -1,6 +1,6 @@
 # Alcampo CLI Reference
 
-Use `alcampo --help` for the live command list. Prefer JSON output for agent work and keep stderr separate from stdout.
+Use this reference for command shapes during normal agent work. Use `alcampo --help` only for install/troubleshooting checks, and avoid subcommand `--help` probes inside task workflows because usage text is emitted on stderr and can be noisy in Hermes terminal transcripts. Prefer JSON output for agent work and keep stderr separate from stdout.
 
 ## Location
 
@@ -93,7 +93,7 @@ alcampo food cook <mealplan-id-or-file> --rating 5 --json
 alcampo food history list --limit 20 --json
 ```
 
-`food run` is the preferred low-intervention path: it loads profile and pantry memory, generates the meal plan, subtracts pantry/fridge items, shops the remaining ingredients, optionally writes a PDF, and returns one JSON object.
+`food plan` and `food run` require a people count from either `--people` or `profile.json`; they intentionally fail instead of inventing a household size. `food run` is the preferred low-intervention path after intake: it loads profile and pantry memory, generates the meal plan, subtracts pantry/fridge items, shops the remaining ingredients, optionally writes a PDF, and returns one JSON object.
 
 Recipe library behavior: embedded seed recipes are always available, and the editable library lives in the SQLite database at `ALCAMPO_CONFIG_DIR/food/recipes.db` or `~/.alcampo/food/recipes.db`. The database stores normalized recipe, tag, ingredient, equipment, step, substitution, allergen-note, nutrition, and full-text search tables. User recipes added through `food recipes add` override seed recipes with the same `id`. Legacy `food/recipes/*.json` files are imported once into SQLite for migration, but new recipes should be added through the CLI. `food recipes add --from-text` parses comma- or newline-separated ingredient lists and auto-derives Spanish search terms. `food recipes search <query> --profile` applies saved profile diets, allergies, and dislikes.
 
@@ -101,7 +101,7 @@ Nutrition behavior: recipes may include `nutrition_per_serving`, and generated m
 
 Expiry behavior: pantry text output marks items expiring within three days with `!`, `food pantry list --expiring-days N` filters pantry output, and `food use-up` ranks recipes that consume pantry items expiring within `N` days.
 
-`food shop` searches multiple Alcampo candidates per required purchase and returns selected product SKU/id, name, price, unit price, package size, purchase quantity, line total, image URL, product URL, availability, offers, offer count, selection reason, quantity reason, basket line, grouped shopping sections with subtotals, and alternates considered. It rejects remembered `rejected_products` matches by SKU, id, EAN, brand, or name, and boosts remembered `liked_products`. If no `selection_policy` is saved, an interactive terminal prompts once; non-interactive agents should set it with `food profile set` or pass `--selection-policy`, which is remembered.
+`food shop` searches multiple Alcampo candidates per required purchase and returns selected product SKU/id, name, price, unit price, package size, purchase quantity, line total, image URL, product URL, availability, offers, offer count, selection reason, quantity reason, basket line, grouped shopping sections with subtotals, budget status notes, and compatible alternates considered. It rejects products that conflict with saved diets, allergies, dislikes, rejected brands, or remembered `rejected_products` matches by SKU, id, EAN, brand, or name, and boosts remembered `liked_products`. If no `selection_policy` is saved, an interactive terminal prompts once; non-interactive agents should set it with `food profile set` or pass `--selection-policy`, which is remembered.
 
 Use `--basket-out basket.txt` on `food shop` or `food run` when the next step may be guarded cart preparation. The file uses the same `<product_id_or_sku> <qty> # comment` lines returned in `basket_lines`, so it can be passed directly to `alcampo total -f basket.txt --json --max <eur>` and then `alcampo cart set-many -f basket.txt --max <eur> --json` after explicit approval.
 
@@ -183,6 +183,8 @@ alcampo checkout select-slot --slot <slot_id> --max <eur> --json
 `cart get --json` returns a normalized agent-readable cart summary: item count, total, and line items with product id/SKU, name, brand, quantity, package price, unit price, line total, size, category, product URL, image URLs, offers, and availability. Use `cart get --json --raw` only when troubleshooting private-API response drift.
 
 All writes require an authenticated/imported session, CSRF token, verified active cart total, and nonzero spending guard. The guard can be `--max <eur>`, `ALCAMPO_MAX_EUR`, or `[limits] max_eur` in config.
+
+For clear-cart requests, read the cart first, set `--max` to the verified current total or the next whole euro, run `cart clear --yes --max <eur> --json`, then verify with `cart get --json`. Report success only when the read-back result is empty and total is zero.
 
 `checkout confirm-slot -f <json> --max <eur>` sends only an explicit confirmation payload returned by the reservation flow. Do not guess the payload.
 

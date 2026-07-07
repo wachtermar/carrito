@@ -215,6 +215,7 @@ func normalizeKey(s string) string {
 	var b strings.Builder
 	lastSpace := false
 	for _, r := range s {
+		r = foldKeyRune(r)
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(r)
@@ -227,6 +228,25 @@ func normalizeKey(s string) string {
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+func foldKeyRune(r rune) rune {
+	switch r {
+	case '\u00e1', '\u00e0', '\u00e2', '\u00e4':
+		return 'a'
+	case '\u00e9', '\u00e8', '\u00ea', '\u00eb':
+		return 'e'
+	case '\u00ed', '\u00ec', '\u00ee', '\u00ef':
+		return 'i'
+	case '\u00f3', '\u00f2', '\u00f4', '\u00f6':
+		return 'o'
+	case '\u00fa', '\u00f9', '\u00fb', '\u00fc':
+		return 'u'
+	case '\u00f1':
+		return 'n'
+	default:
+		return r
+	}
 }
 
 func normalizeUnit(unit string) string {

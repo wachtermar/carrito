@@ -12,13 +12,22 @@ Use this reference when the user asks for meal plans, recipes, pantry-aware shop
    - `alcampo food staples list --json`
    - `alcampo food recipes list --json` when selecting from or editing the recipe library
    - `alcampo food history list --limit 20 --json` when prior ratings or substitutions could affect the request.
-2. Resolve only missing high-impact preferences:
-   - If `selection_policy` is missing, ask once or pass `--selection-policy balanced|cheapest|quality` and let the CLI remember it.
-   - If allergies are unknown and the task involves new foods, ask before shopping.
-   - If no budget is known, proceed without a budget for planning but require a max spend before cart writes.
-3. Prefer the one-command path for low-intervention runs:
+2. Apply the meal-planning intake gate before planning or shopping:
+   - This gate is mandatory for open-ended requests such as "make a meal plan", "full weekly plan", "breakfast lunch dinner", "shop for the week", or "plan my groceries" unless the current request or saved profile already answers the missing fields.
+   - Ask all missing high-impact questions in one compact message, then stop.
+   - For detailed scenario coverage, load `references/intake-scenarios.md`.
+   - Required fields for weekly/full planning: people count, days/meals, diet pattern, allergies, dislikes/foods to avoid, grocery budget target or explicit no-budget preference, pantry/fridge/freezer usage, expiring items, staples, cooking-effort preference, and nutrition goals when the user cares about diet or health.
+   - Required fields for shopping/product selection: target budget, selection policy (`balanced`, `cheapest`, `quality`), preferred/rejected brands/products when known, and whether to only review or also prepare a basket.
+   - Required fields for cart mutation: explicit approval plus a maximum spend. Never infer approval from a planning request.
+   - If the user says "surprise me", "use defaults", "just do it", or gives all high-impact details, continue; otherwise ask first.
+3. Resolve saved preferences after the user answers:
+   - Save durable household facts with `food profile set` when the user clearly gives them.
+   - If `selection_policy` is still missing after intake, ask once for `balanced`, `cheapest`, or `quality`; do not silently choose for a real shopping run.
+   - If allergies are unknown and the task involves new foods, ask before planning or shopping.
+   - If no budget is known and the user wants shopping/product selection, ask before shopping; planning-only can proceed after people/diet/allergy/scope intake.
+4. Prefer the one-command path for low-intervention runs after intake:
    - `alcampo food run --days <n> --people <n> --meals dinner --selection-policy balanced --basket-out basket.txt --json`
-4. Present review output before cart mutation:
+5. Present review output before cart mutation:
    - meal plan and recipes
    - pantry/fridge items used
    - expiring pantry items and `food use-up` suggestions when relevant
@@ -33,18 +42,20 @@ Use this reference when the user asks for meal plans, recipes, pantry-aware shop
    - unavailable or unsafe items
    - basket file path when `--basket-out` was used
    - estimated total
-5. Mutate cart only after explicit user approval and max spend:
+   - strict expiring-item requests verified against `pantry_usage`; if pantry matching misses a requested ingredient because names differ, use recipe-aligned pantry names or add a custom diet/allergy-safe recipe
+6. Mutate cart only after explicit user approval and max spend:
    - use the basket file from `--basket-out`, or write `basket_lines` to a basket file
    - `alcampo total -f <file> --json --max <eur>`
    - `alcampo cart set-many -f <file> --max <eur> --json`
-6. After the user confirms the shop was bought, picked up, or delivered, update pantry:
+   - for cart clearing, read current cart, use a guard at or just above the verified current total, run `alcampo cart clear --yes --max <eur> --json`, then verify the cart is empty
+7. After the user confirms the shop was bought, picked up, or delivered, update pantry:
    - `alcampo food receive <shop-or-run.json> --json`
    - This imports selected products into pantry using purchased package counts and writes a `shop_received` history event.
-7. For external purchase evidence, update pantry with imports:
+8. For external purchase evidence, update pantry with imports:
    - `alcampo food import-receipt --file <text|-> --json`
    - `alcampo food import-orders --limit <n> --infer-staples --json` when an authenticated session is available.
    - Treat receipt/order parsing as best-effort and show warnings or suggested staples before relying on them.
-8. After cooking, update memory:
+9. After cooking, update memory:
    - `alcampo food cook <mealplan-id-or-file> --rating <1-5> --json`
    - This subtracts planned pantry/fridge usage, appends history, learns liked recipes from 4-5 star ratings, and learns rejected recipes from 1-2 star ratings.
 
@@ -99,19 +110,30 @@ Do not store auth secrets, cURL exports, bearer tokens, CSRF tokens, or password
 Proceed without asking when:
 
 - market is already set
-- profile has people count and selection policy
-- pantry is available or empty
-- the request is read-only: plan, recipe, shop, PDF
+- profile or current request has people count, diet/allergy/dislike constraints, meal scope, budget stance, and selection policy when shopping
+- pantry/staple behavior is known or the user explicitly says not to use pantry memory
+- the request is a narrow read-only lookup such as product search, recipe lookup, current cart view, history list, or PDF generation from an existing file
 - the user explicitly says a saved shop result was delivered and asks to update pantry
 
 Ask or stop when:
 
+- an open-ended meal plan or shopping request is missing household size, meal scope, diet/allergy/dislike constraints, pantry/staple behavior, budget stance, cooking-effort preference, or shopping budget/policy
 - allergies/diet constraints are unknown and the requested plan could introduce risk
 - cart mutation is requested without explicit approval or max spend
 - pantry restock is requested for a shop result that has not been bought, picked up, or delivered
 - Alcampo session/market is missing for priced shopping
 - product data conflicts with saved allergies or dislikes
 - checkout/payment/order submission is requested
+
+Verify before saying done:
+
+- JSON output parsed successfully and warnings/errors were surfaced.
+- Open-ended meal-plan/shopping transcripts show intake questions were asked before planning when saved profile/current request did not already cover the required fields.
+- Meal plan includes planned days/meals or recipe entries, pantry usage when available, required purchases, and nutrition when available.
+- Multi-meal plans use recipes tagged for the requested meal type; breakfasts should not be filled by lunch/dinner-only recipes.
+- Shopping output includes selected products, images when present, prices, grouped sections, reasons, alternates, and basket lines or missing-item warnings.
+- Cart mutations have a read-back `cart get --json` result proving the intended state.
+- Memory mutations have pantry/history read-back when the user expects persistence.
 
 ## Roadmap For A Near-Perfect Skill
 
