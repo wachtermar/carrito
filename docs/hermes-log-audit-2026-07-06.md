@@ -10,7 +10,7 @@ The Hermes session database and logs showed session `20260706_200836_04477d` sta
 lets get started making this work. i need a full meal plan for the week breakfast lunch dinner
 ```
 
-The agent loaded `alcampo-shopping`, read empty food profile/pantry/staples, and generated a plan anyway. Captured artifacts under `.hermes-output/mealplan-week*.json` showed:
+The agent loaded `carrito-shopping`, read empty food profile/pantry/staples, and generated a plan anyway. Captured artifacts under `.hermes-output/mealplan-week*.json` showed:
 
 - `people: 1`
 - 7 days, breakfast/lunch/dinner
@@ -25,7 +25,7 @@ This proved the skill was not enforcing intake before open-ended planning.
 
 ## Fixes Applied
 
-- Added a mandatory intake gate to `skills/alcampo-shopping/SKILL.md`.
+- Added a mandatory intake gate to `skills/carrito-shopping/SKILL.md`.
 - Updated `references/food-agent-playbook.md` so read-only weekly plans no longer bypass questions.
 - Added `references/intake-scenarios.md` with concrete required questions and failure cases.
 - Added `scripts/check-intake-response.py` to regression-check captured Hermes responses.
@@ -88,9 +88,9 @@ It generated `.hermes-output/intake-test-v3/answered-plan.json`, then validated:
 - no mushroom terms
 - no shopping/cart commands
 
-The first resumed run also showed why the CLI help fix was needed: `alcampo food plan --help` returned nonzero before the fix, causing Hermes to inspect source files. After the fix, installed help commands exit `0`.
+The first resumed run also showed why the CLI help fix was needed: `carrito food plan --help` returned nonzero before the fix, causing Hermes to inspect source files. After the fix, installed help commands exit `0`.
 
-Direct installed-CLI shopping validation with isolated `ALCAMPO_CONFIG_DIR` generated `.hermes-output/all-details-test-v2/`:
+Direct installed-CLI shopping validation with isolated `CARRITO_CONFIG_DIR` generated `.hermes-output/all-details-test-v2/`:
 
 - Vaguada market
 - 2 days of vegetarian dinners

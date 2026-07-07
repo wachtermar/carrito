@@ -1,0 +1,4 @@
+interface:
+  display_name: "Carrito Shopping"
+  short_description: "View carts, plan meals, and shop Alcampo Spain"
+  default_prompt: "Use $carrito-shopping to show my Alcampo cart with images, quantities, prices, line totals, offers, and product URLs; or run a pantry- and staples-aware meal plan, select Alcampo products with offers/images/quantities/reasons, receive delivered shops into pantry, then update pantry/history after cooking."

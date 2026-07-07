@@ -12,7 +12,7 @@ Primary references:
 
 ## Decision
 
-Keep Alcampo Shopping as a Hermes Skill that drives the local `alcampo` CLI through terminal commands.
+Keep Carrito as a Hermes Skill that drives the local `carrito` CLI through terminal commands.
 
 Hermes' own guidance prefers a Skill when a capability can be expressed as instructions plus shell commands, especially when wrapping an external CLI/API. That matches this project: the Go CLI already owns product search, market context, food memory, recipe planning, JSON output, cart safety checks, auth bootstrap, receipt/order import, PDF generation, and exact money/quantity logic.
 
@@ -36,12 +36,19 @@ Build a Hermes plugin/tool later only if at least one of these becomes true:
 - The skill keeps bulky command detail in `references/cli-reference.md` and `references/food-agent-playbook.md` so normal prompts stay focused.
 - The skill tells Hermes to use JSON output, verify read-backs after writes, and never place orders or handle raw secrets in chat.
 
+## OpenClaw Compatibility
+
+OpenClaw expects a Git-installed skill source to expose a `SKILL.md` at the source root, so this repository keeps a root compatibility shim and the canonical portable package under `skills/carrito-shopping`.
+
+OpenClaw metadata is declared under `metadata.openclaw` and uses a `kind: go` installer for the `carrito` CLI binary. Do not use unsupported installer kinds in the skill metadata. Keep any optional auth-related environment variables declared as optional `envVars`, not required gates, because the skill supports read-only anonymous search after a market is set.
+
 ## Test Matrix
 
 - Go unit tests: `go test ./...`
-- Build: `go build -o alcampo ./cmd/alcampo`
+- Build: `go build -o carrito ./cmd/carrito`
 - Skill install without interactive login: `./install-skill.sh --hermes --no-login`
 - Hermes discovery: `hermes skills list`
 - Public live reads: set a known market, run search/product/batch/total.
-- Food workflows with isolated `ALCAMPO_CONFIG_DIR`: profile, pantry, staples, recipes, plan, shop, run, receive, cook, history, PDF.
-- Hermes prompt simulations: invoke `/alcampo-shopping` or `--skills alcampo-shopping` with shopping, weekly meal plan, diet, pantry, waste-reduction, cart-review, and guarded cart-prep requests.
+- Food workflows with isolated `CARRITO_CONFIG_DIR`: profile, pantry, staples, recipes, plan, shop, run, receive, cook, history, PDF.
+- Hermes prompt simulations: invoke `/carrito-shopping` or `--skills carrito-shopping` with shopping, weekly meal plan, diet, pantry, waste-reduction, cart-review, and guarded cart-prep requests.
+- OpenClaw install simulation: `openclaw skills install git:wachtermar/carrito@main`, then invoke `/carrito-shopping` in a fresh session.
