@@ -248,6 +248,17 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	basketOptimizationOut := fs.String("basket-optimization-out", "", "optional basket optimization plan JSON path")
 	budgetDealOut := fs.String("budget-deal-out", "", "optional budget and deal evidence JSON path")
 	budgetRepairOut := fs.String("budget-repair-out", "", "optional budget repair plan JSON path")
+	intentFile := fs.String("intent-file", "", "optional meal-run intent contract JSON path")
+	intentOut := fs.String("intent-out", "", "optional normalized meal-run intent JSON path")
+	constraintReportOut := fs.String("constraint-report-out", "", "optional request constraint satisfaction report JSON path")
+	requireIntentReady := fs.Bool("require-intent-ready", false, "return exit 20 when explicit request constraints are not satisfied")
+	maxCookMinutes := fs.Int("max-cook-minutes", 0, "maximum total minutes per recipe when creating a CLI intent")
+	var excludedIngredients stringListFlag
+	var excludedAllergens stringListFlag
+	var dietRules stringListFlag
+	fs.Var(&excludedIngredients, "exclude-ingredient", "ingredient term to exclude from recipes/products; repeat or comma-separate")
+	fs.Var(&excludedAllergens, "exclude-allergen", "allergen term to exclude from recipes/products; repeat or comma-separate")
+	fs.Var(&dietRules, "diet-rule", "diet rule to record in the intent; repeat or comma-separate")
 	repairBudget := fs.Bool("repair-budget", false, "attempt validated budget repair when the budget/deal report is over budget")
 	noBudgetRepair := fs.Bool("no-budget-repair", false, "disable budget repair even when requested by output flags")
 	allowBudgetProductSwitches := fs.Bool("allow-budget-product-switches", true, "allow budget repair to switch to validated cheaper equivalent products")
@@ -337,6 +348,10 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	resolvedPolicy, err := resolveAndSaveFoodPolicy(&profile, *policy, stderr)
+	if err != nil {
+		return err
+	}
+	mealRunIntent, err := foodRunIntent(*intentFile, *maxCookMinutes, []string(excludedIngredients), []string(excludedAllergens), []string(dietRules))
 	if err != nil {
 		return err
 	}
@@ -437,7 +452,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	}
 	recipeSwapAllowed := *allowRecipeSwap && !*noRecipeSwap
 	nutritionPolicy := foodRunNutritionPolicy(*nutritionMode, *requireNutritionReady, *minNutritionLineCoverage, *minNutritionQuantityCoverage, *includePurchasedExcessNutrition, *allowPantryProfileNutrition, *allowBuiltinPantryNutrition)
-	readinessPolicy := foodRunReadinessPolicy(*strictQuantity, *requireSafeBasket, *requireCookReady, *requireNutritionReady, *allowEstimatedVariableWeight, *allowLowConfidenceBasket, recipeSwapAllowed, recoveryOpts.AllowIngredientSubstitution, *strictRecipeQuality, *requireRecipeImages, *requireBudgetReady)
+	readinessPolicy := foodRunReadinessPolicy(*strictQuantity, *requireSafeBasket, *requireCookReady, *requireNutritionReady, *allowEstimatedVariableWeight, *allowLowConfidenceBasket, recipeSwapAllowed, recoveryOpts.AllowIngredientSubstitution, *strictRecipeQuality, *requireRecipeImages, *requireBudgetReady, *requireIntentReady)
 	recipeSwapOpts := foodRunRecipeSwapOptions(client, profile, pantry, householdProfile, servingPolicy, pantryProfile, pantryPolicy, resolvedPolicy, *limit, mealsList, recipeSwapAllowed, *maxRecipeSwaps, *maxRecipeSwapCandidates, *maxRecipeSwapChecks, ledgerOpts, recoveryOpts, readinessPolicy)
 	if recipeSwapOpts.Enabled || *recipeSwapOut != "" {
 		var swapPlan food.RecipeSwapPlan
@@ -525,6 +540,17 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		artifact = food.AttachBudgetDealReport(artifact, budgetDealReport)
 		readinessGate = food.ApplyReadinessGate(&artifact, readinessPolicy)
 	}
+	if mealRunIntent != nil {
+		artifact = food.AttachMealRunIntent(artifact, *mealRunIntent)
+		constraintReport := food.BuildConstraintSatisfactionReport(artifact, *artifact.MealRunIntent)
+		artifact = food.AttachConstraintSatisfactionReport(artifact, constraintReport)
+		readinessGate = food.ApplyReadinessGate(&artifact, readinessPolicy)
+		if *intentOut != "" {
+			if err := writeJSONPath(*intentOut, artifact.MealRunIntent); err != nil {
+				return err
+			}
+		}
+	}
 	if artifact.BasketSafety != nil {
 		basketSafety = *artifact.BasketSafety
 	}
@@ -560,6 +586,11 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	}
 	if *budgetDealOut != "" && artifact.BudgetDealReport != nil {
 		if err := writeJSONPath(*budgetDealOut, artifact.BudgetDealReport); err != nil {
+			return err
+		}
+	}
+	if *constraintReportOut != "" && artifact.ConstraintSatisfactionReport != nil {
+		if err := writeJSONPath(*constraintReportOut, artifact.ConstraintSatisfactionReport); err != nil {
 			return err
 		}
 	}
@@ -619,7 +650,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	snapshotSummary := foodManifestSnapshotFromClient(client.LiveSnapshotSummary())
-	generationErr := readinessExitError(readinessGate, *requireSafeBasket, *requireCookReady, *requireNutritionReady, *requireBudgetReady)
+	generationErr := readinessExitError(readinessGate, *requireSafeBasket, *requireCookReady, *requireNutritionReady, *requireBudgetReady, *requireIntentReady)
 	generationExitCode := ExitCode(generationErr)
 	generationExitReason := readinessGate.ExitReason
 	if generationErr != nil {
@@ -641,7 +672,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 			AuditMode:            auditMode,
 			GenerationExitCode:   generationExitCode,
 			GenerationExitReason: generationExitReason,
-			ArtifactPaths:        foodRunArtifactPaths(*planOut, *shopOut, runPath, pdfPath, *basketOut, *ledgerOut, *nutritionLedgerOut, *budgetRepairOut, *budgetDealOut, *servingPlanOut, *scaledMealPlanOut, *pantryOut, *pantryConsumptionOut, *readinessOut, *recoveryOut, *recipeSwapOut, *basketOptimizationOut, *recipeIntakeOut, *recipeQualityOut),
+			ArtifactPaths:        foodRunArtifactPaths(*planOut, *shopOut, runPath, pdfPath, *basketOut, *ledgerOut, *nutritionLedgerOut, *intentOut, *constraintReportOut, *budgetRepairOut, *budgetDealOut, *servingPlanOut, *scaledMealPlanOut, *pantryOut, *pantryConsumptionOut, *readinessOut, *recoveryOut, *recipeSwapOut, *basketOptimizationOut, *recipeIntakeOut, *recipeQualityOut),
 			Snapshot:             snapshotSummary,
 		})
 		if err != nil {
@@ -680,44 +711,48 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	res := struct {
-		MealPlan               food.MealPlan                 `json:"mealplan"`
-		Shop                   food.ShopResult               `json:"shop"`
-		QuantityLedger         food.QuantityLedger           `json:"quantity_ledger"`
-		BasketSafety           food.BasketSafety             `json:"basket_safety"`
-		RecoveryPlan           *food.RecoveryPlan            `json:"recovery_plan,omitempty"`
-		RecipeSwapPlan         *food.RecipeSwapPlan          `json:"recipe_swap_plan,omitempty"`
-		BasketOptimizationPlan *food.BasketOptimizationPlan  `json:"basket_optimization_plan,omitempty"`
-		BudgetRepairPlan       *food.BudgetRepairPlan        `json:"budget_repair_plan,omitempty"`
-		BudgetDealReport       *food.BudgetDealReport        `json:"budget_deal_report,omitempty"`
-		NutritionLedger        *food.NutritionLedger         `json:"nutrition_ledger,omitempty"`
-		RecipeIntakePlan       *food.RecipeIntakePlan        `json:"recipe_intake_plan,omitempty"`
-		RecipeQualityReport    *food.RecipeQualityReport     `json:"recipe_quality_report,omitempty"`
-		ServingPlan            *food.ServingPlan             `json:"serving_plan,omitempty"`
-		ScaledMealPlan         *food.ScaledMealPlan          `json:"scaled_mealplan,omitempty"`
-		PantryResolution       *food.PantryResolution        `json:"pantry_resolution,omitempty"`
-		ReadinessGate          food.ReadinessGate            `json:"readiness_gate"`
-		PDF                    string                        `json:"pdf,omitempty"`
-		Basket                 string                        `json:"basket,omitempty"`
-		Run                    string                        `json:"run,omitempty"`
-		Ledger                 string                        `json:"ledger,omitempty"`
-		Recovery               string                        `json:"recovery,omitempty"`
-		RecipeSwap             string                        `json:"recipe_swap,omitempty"`
-		BasketOptimization     string                        `json:"basket_optimization,omitempty"`
-		BudgetRepair           string                        `json:"budget_repair,omitempty"`
-		BudgetDeal             string                        `json:"budget_deal,omitempty"`
-		NutritionLedgerPath    string                        `json:"nutrition_ledger_path,omitempty"`
-		RecipeIntake           string                        `json:"recipe_intake,omitempty"`
-		RecipeQuality          string                        `json:"recipe_quality,omitempty"`
-		ServingPlanPath        string                        `json:"serving_plan_path,omitempty"`
-		ScaledMealPlanPath     string                        `json:"scaled_mealplan_path,omitempty"`
-		Pantry                 string                        `json:"pantry,omitempty"`
-		PantryConsumption      string                        `json:"pantry_consumption,omitempty"`
-		Readiness              string                        `json:"readiness,omitempty"`
-		Manifest               string                        `json:"manifest,omitempty"`
-		Audit                  string                        `json:"audit,omitempty"`
-		Snapshot               *food.ManifestSnapshotSummary `json:"snapshot,omitempty"`
-		ArtifactAudit          *food.ArtifactAuditReport     `json:"artifact_audit,omitempty"`
-	}{MealPlan: plan, Shop: shop, QuantityLedger: ledger, BasketSafety: basketSafety, RecoveryPlan: artifact.RecoveryPlan, RecipeSwapPlan: artifact.RecipeSwapPlan, BasketOptimizationPlan: artifact.BasketOptimizationPlan, BudgetRepairPlan: artifact.BudgetRepairPlan, BudgetDealReport: artifact.BudgetDealReport, NutritionLedger: artifact.NutritionLedger, RecipeIntakePlan: artifact.RecipeIntakePlan, RecipeQualityReport: artifact.RecipeQualityReport, ServingPlan: artifact.ServingPlan, ScaledMealPlan: artifact.ScaledMealPlan, PantryResolution: artifact.PantryResolution, ReadinessGate: readinessGate, PDF: pdfPath, Basket: *basketOut, Run: runPath, Ledger: *ledgerOut, Recovery: *recoveryOut, RecipeSwap: *recipeSwapOut, BasketOptimization: *basketOptimizationOut, BudgetRepair: *budgetRepairOut, BudgetDeal: *budgetDealOut, NutritionLedgerPath: *nutritionLedgerOut, RecipeIntake: *recipeIntakeOut, RecipeQuality: *recipeQualityOut, ServingPlanPath: *servingPlanOut, ScaledMealPlanPath: *scaledMealPlanOut, Pantry: *pantryOut, PantryConsumption: *pantryConsumptionOut, Readiness: *readinessOut, Manifest: manifestPath, Audit: *auditOut, Snapshot: snapshotSummary, ArtifactAudit: auditReport}
+		MealPlan                     food.MealPlan                      `json:"mealplan"`
+		Shop                         food.ShopResult                    `json:"shop"`
+		QuantityLedger               food.QuantityLedger                `json:"quantity_ledger"`
+		BasketSafety                 food.BasketSafety                  `json:"basket_safety"`
+		RecoveryPlan                 *food.RecoveryPlan                 `json:"recovery_plan,omitempty"`
+		RecipeSwapPlan               *food.RecipeSwapPlan               `json:"recipe_swap_plan,omitempty"`
+		BasketOptimizationPlan       *food.BasketOptimizationPlan       `json:"basket_optimization_plan,omitempty"`
+		MealRunIntent                *food.MealRunIntent                `json:"meal_run_intent,omitempty"`
+		ConstraintSatisfactionReport *food.ConstraintSatisfactionReport `json:"constraint_satisfaction_report,omitempty"`
+		BudgetRepairPlan             *food.BudgetRepairPlan             `json:"budget_repair_plan,omitempty"`
+		BudgetDealReport             *food.BudgetDealReport             `json:"budget_deal_report,omitempty"`
+		NutritionLedger              *food.NutritionLedger              `json:"nutrition_ledger,omitempty"`
+		RecipeIntakePlan             *food.RecipeIntakePlan             `json:"recipe_intake_plan,omitempty"`
+		RecipeQualityReport          *food.RecipeQualityReport          `json:"recipe_quality_report,omitempty"`
+		ServingPlan                  *food.ServingPlan                  `json:"serving_plan,omitempty"`
+		ScaledMealPlan               *food.ScaledMealPlan               `json:"scaled_mealplan,omitempty"`
+		PantryResolution             *food.PantryResolution             `json:"pantry_resolution,omitempty"`
+		ReadinessGate                food.ReadinessGate                 `json:"readiness_gate"`
+		PDF                          string                             `json:"pdf,omitempty"`
+		Basket                       string                             `json:"basket,omitempty"`
+		Run                          string                             `json:"run,omitempty"`
+		Ledger                       string                             `json:"ledger,omitempty"`
+		Recovery                     string                             `json:"recovery,omitempty"`
+		RecipeSwap                   string                             `json:"recipe_swap,omitempty"`
+		BasketOptimization           string                             `json:"basket_optimization,omitempty"`
+		Intent                       string                             `json:"intent,omitempty"`
+		ConstraintReport             string                             `json:"constraint_report,omitempty"`
+		BudgetRepair                 string                             `json:"budget_repair,omitempty"`
+		BudgetDeal                   string                             `json:"budget_deal,omitempty"`
+		NutritionLedgerPath          string                             `json:"nutrition_ledger_path,omitempty"`
+		RecipeIntake                 string                             `json:"recipe_intake,omitempty"`
+		RecipeQuality                string                             `json:"recipe_quality,omitempty"`
+		ServingPlanPath              string                             `json:"serving_plan_path,omitempty"`
+		ScaledMealPlanPath           string                             `json:"scaled_mealplan_path,omitempty"`
+		Pantry                       string                             `json:"pantry,omitempty"`
+		PantryConsumption            string                             `json:"pantry_consumption,omitempty"`
+		Readiness                    string                             `json:"readiness,omitempty"`
+		Manifest                     string                             `json:"manifest,omitempty"`
+		Audit                        string                             `json:"audit,omitempty"`
+		Snapshot                     *food.ManifestSnapshotSummary      `json:"snapshot,omitempty"`
+		ArtifactAudit                *food.ArtifactAuditReport          `json:"artifact_audit,omitempty"`
+	}{MealPlan: plan, Shop: shop, QuantityLedger: ledger, BasketSafety: basketSafety, RecoveryPlan: artifact.RecoveryPlan, RecipeSwapPlan: artifact.RecipeSwapPlan, BasketOptimizationPlan: artifact.BasketOptimizationPlan, MealRunIntent: artifact.MealRunIntent, ConstraintSatisfactionReport: artifact.ConstraintSatisfactionReport, BudgetRepairPlan: artifact.BudgetRepairPlan, BudgetDealReport: artifact.BudgetDealReport, NutritionLedger: artifact.NutritionLedger, RecipeIntakePlan: artifact.RecipeIntakePlan, RecipeQualityReport: artifact.RecipeQualityReport, ServingPlan: artifact.ServingPlan, ScaledMealPlan: artifact.ScaledMealPlan, PantryResolution: artifact.PantryResolution, ReadinessGate: readinessGate, PDF: pdfPath, Basket: *basketOut, Run: runPath, Ledger: *ledgerOut, Recovery: *recoveryOut, RecipeSwap: *recipeSwapOut, BasketOptimization: *basketOptimizationOut, Intent: *intentOut, ConstraintReport: *constraintReportOut, BudgetRepair: *budgetRepairOut, BudgetDeal: *budgetDealOut, NutritionLedgerPath: *nutritionLedgerOut, RecipeIntake: *recipeIntakeOut, RecipeQuality: *recipeQualityOut, ServingPlanPath: *servingPlanOut, ScaledMealPlanPath: *scaledMealPlanOut, Pantry: *pantryOut, PantryConsumption: *pantryConsumptionOut, Readiness: *readinessOut, Manifest: manifestPath, Audit: *auditOut, Snapshot: snapshotSummary, ArtifactAudit: auditReport}
 	if *jsonOut {
 		if err := output.JSON(stdout, res); err != nil {
 			return err
@@ -738,6 +773,9 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	}
 	if artifact.BudgetRepairPlan != nil {
 		printBudgetRepairPlan(stdout, *artifact.BudgetRepairPlan)
+	}
+	if artifact.ConstraintSatisfactionReport != nil {
+		printConstraintSatisfaction(stdout, *artifact.ConstraintSatisfactionReport)
 	}
 	if artifact.BudgetDealReport != nil {
 		printBudgetDealReport(stdout, *artifact.BudgetDealReport)
@@ -760,6 +798,12 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	}
 	if *basketOptimizationOut != "" {
 		fmt.Fprintf(stdout, "basket_optimization\t%s\n", *basketOptimizationOut)
+	}
+	if *intentOut != "" {
+		fmt.Fprintf(stdout, "intent\t%s\n", *intentOut)
+	}
+	if *constraintReportOut != "" {
+		fmt.Fprintf(stdout, "constraint_report\t%s\n", *constraintReportOut)
 	}
 	if *budgetRepairOut != "" {
 		fmt.Fprintf(stdout, "budget_repair\t%s\n", *budgetRepairOut)
@@ -1030,7 +1074,7 @@ func foodRunLedgerOptionsWithPantry(opts food.QuantityLedgerOptions, artifact fo
 	return opts
 }
 
-func foodRunReadinessPolicy(strictQuantity, requireSafeBasket, requireCookReady, requireNutritionReady, allowEstimatedVariableWeight, allowLowConfidenceBasket, allowRecipeSwap, allowIngredientSubstitution, strictRecipeQuality, requireRecipeImages, requireBudgetReady bool) food.ReadinessPolicy {
+func foodRunReadinessPolicy(strictQuantity, requireSafeBasket, requireCookReady, requireNutritionReady, allowEstimatedVariableWeight, allowLowConfidenceBasket, allowRecipeSwap, allowIngredientSubstitution, strictRecipeQuality, requireRecipeImages, requireBudgetReady, requireIntentReady bool) food.ReadinessPolicy {
 	return food.ReadinessPolicy{
 		StrictQuantity:               strictQuantity,
 		RequireSafeBasket:            requireSafeBasket,
@@ -1043,6 +1087,7 @@ func foodRunReadinessPolicy(strictQuantity, requireSafeBasket, requireCookReady,
 		StrictRecipeQuality:          strictRecipeQuality,
 		RequireRecipeImages:          requireRecipeImages,
 		RequireBudgetReady:           requireBudgetReady,
+		RequireIntentReady:           requireIntentReady,
 	}
 }
 
@@ -1166,6 +1211,46 @@ func foodRunBudgetRepairOptions(client *alcampo.Client, profile food.Profile, po
 	}
 }
 
+func foodRunIntent(path string, maxCookMinutes int, excludedIngredients, excludedAllergens, dietRules []string) (*food.MealRunIntent, error) {
+	var intent food.MealRunIntent
+	hasIntent := false
+	if strings.TrimSpace(path) != "" {
+		loaded, err := food.LoadMealRunIntent(path)
+		if err != nil {
+			return nil, err
+		}
+		intent = loaded
+		hasIntent = true
+	}
+	hasCLIIntent := maxCookMinutes > 0 || len(excludedIngredients) > 0 || len(excludedAllergens) > 0 || len(dietRules) > 0
+	if hasCLIIntent && !hasIntent {
+		intent = food.MealRunIntent{SchemaVersion: "1", Source: "cli"}
+		hasIntent = true
+	}
+	if !hasIntent {
+		return nil, nil
+	}
+	if maxCookMinutes > 0 {
+		if intent.Cooking == nil {
+			intent.Cooking = &food.CookingIntent{}
+		}
+		value := maxCookMinutes
+		intent.Cooking.MaxTotalMinutes = &value
+		intent.Cooking.RequireTimeEvidence = true
+	}
+	if len(excludedIngredients) > 0 || len(excludedAllergens) > 0 || len(dietRules) > 0 {
+		if intent.Diet == nil {
+			intent.Diet = &food.DietIntent{}
+		}
+		intent.Diet.ExcludedIngredients = append(intent.Diet.ExcludedIngredients, excludedIngredients...)
+		intent.Diet.ExcludedAllergens = append(intent.Diet.ExcludedAllergens, excludedAllergens...)
+		intent.Diet.DietRules = append(intent.Diet.DietRules, dietRules...)
+		intent.Diet.RequireDeterministicCheck = true
+	}
+	intent = food.NormalizeMealRunIntent(intent)
+	return &intent, nil
+}
+
 func normalizeBasketOptimizationObjective(value string) string {
 	switch strings.ToLower(strings.TrimSpace(strings.ReplaceAll(value, "-", "_"))) {
 	case food.BasketObjectiveLowestPrice:
@@ -1199,7 +1284,7 @@ func writeFoodShopOutputsWithReadiness(shop food.ShopResult, outPath, basketOut 
 	return nil
 }
 
-func readinessExitError(gate food.ReadinessGate, requireSafeBasket, requireCookReady, requireNutritionReady, requireBudgetReady bool) error {
+func readinessExitError(gate food.ReadinessGate, requireSafeBasket, requireCookReady, requireNutritionReady, requireBudgetReady, requireIntentReady bool) error {
 	if requireCookReady && !gate.SafeToCook {
 		return ExitError{Code: food.ReadinessExitBlocked, Err: fmt.Errorf("food run generated diagnostic artifacts but meal plan is not cook-ready: %s", gate.ExitReason)}
 	}
@@ -1208,6 +1293,9 @@ func readinessExitError(gate food.ReadinessGate, requireSafeBasket, requireCookR
 	}
 	if requireBudgetReady && !gate.SafeToReportBudget {
 		return ExitError{Code: food.ReadinessExitBlocked, Err: fmt.Errorf("food run generated diagnostic artifacts but budget reporting is not ready: %s", gate.ExitReason)}
+	}
+	if requireIntentReady && !gate.SafeToSatisfyIntent {
+		return ExitError{Code: food.ReadinessExitBlocked, Err: fmt.Errorf("food run generated diagnostic artifacts but request constraints are not satisfied: %s", gate.ExitReason)}
 	}
 	if !requireSafeBasket || gate.SafeToBuild {
 		return nil

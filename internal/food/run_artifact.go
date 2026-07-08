@@ -239,6 +239,13 @@ func RefreshFoodRunArtifact(artifact FoodRunArtifact, meals []string) FoodRunArt
 		report := BuildBudgetDealReport(artifact)
 		artifact = AttachBudgetDealReport(artifact, report)
 	}
+	if artifact.MealRunIntent != nil {
+		artifact = AttachMealRunIntent(artifact, *artifact.MealRunIntent)
+	}
+	if artifact.ConstraintSatisfactionReport != nil && artifact.MealRunIntent != nil {
+		report := BuildConstraintSatisfactionReport(artifact, *artifact.MealRunIntent)
+		artifact = AttachConstraintSatisfactionReport(artifact, report)
+	}
 	if artifact.BudgetRepairPlan != nil {
 		artifact = AttachBudgetRepairPlan(artifact, *artifact.BudgetRepairPlan)
 	}

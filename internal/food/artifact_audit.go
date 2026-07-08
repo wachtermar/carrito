@@ -154,21 +154,23 @@ func AuditFoodRunArtifacts(opts ArtifactAuditOptions) (ArtifactAuditReport, erro
 
 func manifestFingerprintsFromArtifact(artifact FoodRunArtifact) FoodRunFingerprintSummary {
 	return FoodRunFingerprintSummary{
-		MealPlan:          artifact.MealPlanFingerprint,
-		ProductSelection:  artifact.ProductSelectionFingerprint,
-		HouseholdProfile:  artifact.HouseholdProfileFingerprint,
-		ServingPlan:       artifact.ServingPlanFingerprint,
-		ScaledMealPlan:    artifact.ScaledMealPlanFingerprint,
-		PantryProfile:     artifact.PantryProfileFingerprint,
-		PantryResolution:  artifact.PantryResolutionFingerprint,
-		ShopRequirements:  artifact.ShopRequirementsFingerprint,
-		NutritionLedger:   artifact.NutritionLedgerFingerprint,
-		RecipeSet:         artifact.RecipeSetFingerprint,
-		RecipeQuality:     artifact.RecipeQualityFingerprint,
-		RecipeImage:       artifact.RecipeImageFingerprint,
-		BudgetRepair:      artifact.BudgetRepairFingerprint,
-		BudgetDeal:        artifact.BudgetDealFingerprint,
-		PrePantryMealPlan: artifact.PrePantryMealPlanFingerprint,
+		MealPlan:               artifact.MealPlanFingerprint,
+		ProductSelection:       artifact.ProductSelectionFingerprint,
+		HouseholdProfile:       artifact.HouseholdProfileFingerprint,
+		ServingPlan:            artifact.ServingPlanFingerprint,
+		ScaledMealPlan:         artifact.ScaledMealPlanFingerprint,
+		PantryProfile:          artifact.PantryProfileFingerprint,
+		PantryResolution:       artifact.PantryResolutionFingerprint,
+		ShopRequirements:       artifact.ShopRequirementsFingerprint,
+		NutritionLedger:        artifact.NutritionLedgerFingerprint,
+		RecipeSet:              artifact.RecipeSetFingerprint,
+		RecipeQuality:          artifact.RecipeQualityFingerprint,
+		RecipeImage:            artifact.RecipeImageFingerprint,
+		Intent:                 artifact.IntentFingerprint,
+		ConstraintSatisfaction: artifact.ConstraintSatisfactionFingerprint,
+		BudgetRepair:           artifact.BudgetRepairFingerprint,
+		BudgetDeal:             artifact.BudgetDealFingerprint,
+		PrePantryMealPlan:      artifact.PrePantryMealPlanFingerprint,
 	}
 }
 
@@ -191,6 +193,8 @@ func manifestReadinessFromArtifact(artifact FoodRunArtifact) FoodRunManifestRead
 		out.SafeToReportNutrition = gate.SafeToReportNutrition
 		out.RecipeQualityStatus = gate.RecipeQualityStatus
 		out.SafeToUseRecipes = gate.SafeToUseRecipes
+		out.IntentStatus = gate.IntentStatus
+		out.SafeToSatisfyIntent = gate.SafeToSatisfyIntent
 		out.BudgetRepairStatus = gate.BudgetRepairStatus
 		out.BudgetDealStatus = gate.BudgetDealStatus
 		out.BudgetStatus = gate.BudgetStatus
@@ -203,6 +207,7 @@ func manifestReadinessFromArtifact(artifact FoodRunArtifact) FoodRunManifestRead
 		out.StrictRecipeQuality = gate.Policy.StrictRecipeQuality
 		out.RequireRecipeImages = gate.Policy.RequireRecipeImages
 		out.RequireBudgetReady = gate.Policy.RequireBudgetReady
+		out.RequireIntentReady = gate.Policy.RequireIntentReady
 	}
 	return out
 }
@@ -317,6 +322,8 @@ func auditManifestSummary(report *ArtifactAuditReport, manifest FoodRunManifest,
 	checkManifestFingerprint(report, "recipe_set", "$.fingerprints.recipe_set", manifest.Fingerprints.RecipeSet, expected.RecipeSet)
 	checkManifestFingerprint(report, "recipe_quality", "$.fingerprints.recipe_quality", manifest.Fingerprints.RecipeQuality, expected.RecipeQuality)
 	checkManifestFingerprint(report, "recipe_image", "$.fingerprints.recipe_image", manifest.Fingerprints.RecipeImage, expected.RecipeImage)
+	checkManifestFingerprint(report, "intent", "$.fingerprints.intent", manifest.Fingerprints.Intent, expected.Intent)
+	checkManifestFingerprint(report, "constraint_satisfaction", "$.fingerprints.constraint_satisfaction", manifest.Fingerprints.ConstraintSatisfaction, expected.ConstraintSatisfaction)
 	checkManifestFingerprint(report, "budget_repair", "$.fingerprints.budget_repair", manifest.Fingerprints.BudgetRepair, expected.BudgetRepair)
 	checkManifestFingerprint(report, "budget_deal", "$.fingerprints.budget_deal", manifest.Fingerprints.BudgetDeal, expected.BudgetDeal)
 	expectedReadiness := manifestReadinessFromArtifact(run)
@@ -327,6 +334,7 @@ func auditManifestSummary(report *ArtifactAuditReport, manifest FoodRunManifest,
 	report.addCheck("manifest_safe_to_use_recipes_matches", "manifest", "blocking", manifest.Readiness.SafeToUseRecipes == expectedReadiness.SafeToUseRecipes, "manifest", "$.readiness.safe_to_use_recipes", "Manifest safe_to_use_recipes must match the run readiness gate.", "Regenerate the manifest after the final run artifact.", expectedReadiness.SafeToUseRecipes, manifest.Readiness.SafeToUseRecipes)
 	report.addCheck("manifest_safe_to_report_budget_matches", "manifest", "blocking", manifest.Readiness.SafeToReportBudget == expectedReadiness.SafeToReportBudget, "manifest", "$.readiness.safe_to_report_budget", "Manifest safe_to_report_budget must match the run readiness gate.", "Regenerate the manifest after the final run artifact.", expectedReadiness.SafeToReportBudget, manifest.Readiness.SafeToReportBudget)
 	report.addCheck("manifest_safe_to_report_deals_matches", "manifest", "blocking", manifest.Readiness.SafeToReportDeals == expectedReadiness.SafeToReportDeals, "manifest", "$.readiness.safe_to_report_deals", "Manifest safe_to_report_deals must match the run readiness gate.", "Regenerate the manifest after the final run artifact.", expectedReadiness.SafeToReportDeals, manifest.Readiness.SafeToReportDeals)
+	report.addCheck("manifest_safe_to_satisfy_intent_matches", "manifest", "blocking", manifest.Readiness.SafeToSatisfyIntent == expectedReadiness.SafeToSatisfyIntent, "manifest", "$.readiness.safe_to_satisfy_intent", "Manifest safe_to_satisfy_intent must match the run readiness gate.", "Regenerate the manifest after the final run artifact.", expectedReadiness.SafeToSatisfyIntent, manifest.Readiness.SafeToSatisfyIntent)
 	if run.ReadinessGate != nil {
 		expectedExit := expectedGenerationExitCode(*run.ReadinessGate)
 		report.addCheck("manifest_generation_exit_consistent", "manifest", "blocking", manifest.GenerationExitCode == expectedExit, "manifest", "$.generation_exit_code", "Manifest generation exit code must match readiness policy.", "Regenerate the manifest after readiness evaluation.", expectedExit, manifest.GenerationExitCode)
@@ -427,6 +435,8 @@ func auditSidecarEquality(report *ArtifactAuditReport, run FoodRunArtifact, path
 	auditPointerSidecar(report, FoodArtifactBasketOptimization, paths[FoodArtifactBasketOptimization], run.BasketOptimizationPlan)
 	auditPointerSidecar(report, FoodArtifactRecipeIntake, paths[FoodArtifactRecipeIntake], run.RecipeIntakePlan)
 	auditPointerSidecar(report, FoodArtifactRecipeQuality, paths[FoodArtifactRecipeQuality], run.RecipeQualityReport)
+	auditPointerSidecar(report, FoodArtifactIntent, paths[FoodArtifactIntent], run.MealRunIntent)
+	auditPointerSidecar(report, FoodArtifactConstraintSatisfaction, paths[FoodArtifactConstraintSatisfaction], run.ConstraintSatisfactionReport)
 	auditPointerSidecar(report, FoodArtifactBudgetRepair, paths[FoodArtifactBudgetRepair], run.BudgetRepairPlan)
 	auditPointerSidecar(report, FoodArtifactBudgetDeal, paths[FoodArtifactBudgetDeal], run.BudgetDealReport)
 }
@@ -465,9 +475,26 @@ func auditDerivedArtifactFingerprints(report *ArtifactAuditReport, run FoodRunAr
 		checkFingerprint(report, FoodArtifactReadiness, "$.recipe_set_fingerprint", "readiness_recipe_set_fingerprint_matches", run.ReadinessGate.RecipeSetFingerprint, run.RecipeSetFingerprint)
 		checkFingerprint(report, FoodArtifactReadiness, "$.recipe_quality_fingerprint", "readiness_recipe_quality_fingerprint_matches", run.ReadinessGate.RecipeQualityFingerprint, run.RecipeQualityFingerprint)
 		checkFingerprint(report, FoodArtifactReadiness, "$.recipe_image_fingerprint", "readiness_recipe_image_fingerprint_matches", run.ReadinessGate.RecipeImageFingerprint, run.RecipeImageFingerprint)
+		checkFingerprint(report, FoodArtifactReadiness, "$.intent_fingerprint", "readiness_intent_fingerprint_matches", run.ReadinessGate.IntentFingerprint, run.IntentFingerprint)
+		checkFingerprint(report, FoodArtifactReadiness, "$.constraint_satisfaction_fingerprint", "readiness_constraint_fingerprint_matches", run.ReadinessGate.ConstraintSatisfactionFingerprint, run.ConstraintSatisfactionFingerprint)
 		checkFingerprint(report, FoodArtifactReadiness, "$.budget_repair_fingerprint", "readiness_budget_repair_fingerprint_matches", run.ReadinessGate.BudgetRepairFingerprint, run.BudgetRepairFingerprint)
 		checkFingerprint(report, FoodArtifactReadiness, "$.budget_deal_fingerprint", "readiness_budget_deal_fingerprint_matches", run.ReadinessGate.BudgetDealFingerprint, run.BudgetDealFingerprint)
 		report.addCheck("readiness_safe_to_build_matches_basket_safety", "readiness", "blocking", run.BasketSafety == nil || run.ReadinessGate.SafeToBuild == run.BasketSafety.SafeToBuild, FoodArtifactReadiness, "$.safe_to_build", "Readiness safe_to_build must match basket safety.", "Regenerate readiness after basket safety evaluation.")
+		if run.ConstraintSatisfactionReport != nil {
+			report.addCheck("readiness_intent_status_matches", "readiness", "blocking", run.ReadinessGate.IntentStatus == string(run.ConstraintSatisfactionReport.Status), FoodArtifactReadiness, "$.intent_status", "Readiness intent status must match constraint satisfaction report.", "Regenerate readiness after constraint evaluation.", string(run.ConstraintSatisfactionReport.Status), run.ReadinessGate.IntentStatus)
+			report.addCheck("readiness_safe_to_satisfy_intent_matches", "readiness", "blocking", run.ReadinessGate.SafeToSatisfyIntent == run.ConstraintSatisfactionReport.ClaimGuard.MayClaimRequestSatisfied, FoodArtifactReadiness, "$.safe_to_satisfy_intent", "Readiness intent claim flag must match the constraint report.", "Regenerate readiness after constraint evaluation.", run.ConstraintSatisfactionReport.ClaimGuard.MayClaimRequestSatisfied, run.ReadinessGate.SafeToSatisfyIntent)
+		}
+	}
+	if run.MealRunIntent != nil {
+		expectedIntent := IntentFingerprint(*run.MealRunIntent)
+		report.addCheck("intent_fingerprint_matches", "fingerprint", "blocking", run.MealRunIntent.IntentFingerprint == expectedIntent, FoodArtifactIntent, "$.intent_fingerprint", "Intent fingerprint must match the embedded intent.", "Regenerate intent sidecar and run artifact.", expectedIntent, run.MealRunIntent.IntentFingerprint)
+		checkFingerprint(report, FoodArtifactIntent, "$.intent_fingerprint", "intent_run_fingerprint_matches", run.MealRunIntent.IntentFingerprint, run.IntentFingerprint)
+	}
+	if run.ConstraintSatisfactionReport != nil {
+		expectedConstraint := ConstraintSatisfactionFingerprint(*run.ConstraintSatisfactionReport)
+		report.addCheck("constraint_satisfaction_fingerprint_matches", "fingerprint", "blocking", run.ConstraintSatisfactionReport.ConstraintSatisfactionFingerprint == expectedConstraint, FoodArtifactConstraintSatisfaction, "$.constraint_satisfaction_fingerprint", "Constraint satisfaction fingerprint must match the embedded report.", "Regenerate constraint evidence.", expectedConstraint, run.ConstraintSatisfactionReport.ConstraintSatisfactionFingerprint)
+		checkFingerprint(report, FoodArtifactConstraintSatisfaction, "$.intent_fingerprint", "constraint_intent_fingerprint_matches", run.ConstraintSatisfactionReport.IntentFingerprint, run.IntentFingerprint)
+		checkFingerprint(report, FoodArtifactConstraintSatisfaction, "$.constraint_satisfaction_fingerprint", "constraint_run_fingerprint_matches", run.ConstraintSatisfactionReport.ConstraintSatisfactionFingerprint, run.ConstraintSatisfactionFingerprint)
 	}
 	if run.BudgetRepairPlan != nil {
 		expectedRepair := BudgetRepairFingerprint(*run.BudgetRepairPlan)
@@ -559,6 +586,9 @@ func auditBasketFile(report *ArtifactAuditReport, run FoodRunArtifact, path stri
 	if run.BudgetRepairPlan != nil && run.BudgetRepairPlan.Status != BudgetRepairNotRun {
 		report.addCheck("budget_repair_basket_has_marker", "basket", "blocking", summary.HasBudgetRepairMarker, FoodArtifactBasket, "", "Basket must include the budget repair marker when budget repair evidence exists.", "Regenerate the basket from the final run artifact.")
 	}
+	if run.ConstraintSatisfactionReport != nil && !gate.SafeToSatisfyIntent {
+		report.addCheck("intent_failed_basket_has_warning", "basket", "blocking", summary.HasIntentWarning, FoodArtifactBasket, "", "Buildable basket must warn when request constraints are not satisfied.", "Regenerate the basket from the final readiness state.")
+	}
 	report.Summary.BasketActionability = "actionable"
 	if selected == 0 {
 		report.Summary.BasketActionability = "all_pantry"
@@ -590,6 +620,9 @@ func auditPDFFile(report *ArtifactAuditReport, run FoodRunArtifact, path string)
 	}
 	if run.BudgetRepairPlan != nil && run.BudgetRepairPlan.Status != BudgetRepairNotRun {
 		markers = append(markers, "Budget repair actions:")
+	}
+	if run.ConstraintSatisfactionReport != nil && run.ConstraintSatisfactionReport.Status != ConstraintSatisfactionNotRun {
+		markers = append(markers, "Request constraints:")
 	}
 	if run.ServingPlan != nil && run.ServingPlan.Status != ServingPlanNotUsed {
 		markers = append(markers, "Servings and scaling:")
@@ -754,6 +787,7 @@ func (report *ArtifactAuditReport) finalize(gate *ReadinessGate, basket *basketA
 		report.Summary.SafeToUseRecipes = gate.SafeToUseRecipes
 		report.Summary.SafeToReportBudget = gate.SafeToReportBudget
 		report.Summary.SafeToReportDeals = gate.SafeToReportDeals
+		report.Summary.SafeToSatisfyIntent = gate.SafeToSatisfyIntent
 	}
 	if basket != nil && report.Summary.BasketActionability == "" {
 		if basket.ActionableLines > 0 {
@@ -763,14 +797,16 @@ func (report *ArtifactAuditReport) finalize(gate *ReadinessGate, basket *basketA
 		}
 	}
 	report.HermesTrustSummary = HermesTrustSummary{
-		Trustworthy:                 report.Status != ArtifactAuditStatusFail,
-		MayPresentBasketAsReady:     report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToBuild,
-		MayPresentCookReady:         report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToCook,
-		MayPresentNutritionNumbers:  report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToReportNutrition,
-		MayPresentRecipesAsCookable: report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToUseRecipes && gate.SafeToCook,
-		MayPresentBudgetAsReady:     report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToReportBudget,
-		MayPresentDealsAsReady:      report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToReportDeals,
-		MayPresentPDFAsComplete:     report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToBuild && gate.SafeToCook && gate.SafeToUseRecipes && (!gate.Policy.RequireBudgetReady || gate.SafeToReportBudget) && report.Summary.PDFTrustSectionsPresent,
+		Trustworthy:                  report.Status != ArtifactAuditStatusFail,
+		MayPresentBasketAsReady:      report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToBuild,
+		MayPresentCookReady:          report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToCook,
+		MayPresentNutritionNumbers:   report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToReportNutrition,
+		MayPresentRecipesAsCookable:  report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToUseRecipes && gate.SafeToCook,
+		MayPresentBudgetAsReady:      report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToReportBudget,
+		MayPresentDealsAsReady:       report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToReportDeals,
+		MayPresentPDFAsComplete:      report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToBuild && gate.SafeToCook && gate.SafeToUseRecipes && (!gate.Policy.RequireBudgetReady || gate.SafeToReportBudget) && report.Summary.PDFTrustSectionsPresent,
+		MayPresentRequestAsSatisfied: report.Status != ArtifactAuditStatusFail && gate != nil && gate.SafeToSatisfyIntent,
+		MayPresentIntentWarnings:     report.Status != ArtifactAuditStatusFail && gate != nil && gate.IntentStatus != "" && gate.IntentStatus != string(ConstraintSatisfactionNotRun),
 	}
 	if len(report.BlockingIssues) > 0 {
 		issue := report.BlockingIssues[0]
@@ -785,6 +821,8 @@ func (report *ArtifactAuditReport) finalize(gate *ReadinessGate, basket *basketA
 		report.HermesTrustSummary.RequiredUserWarning = "Nutrition numbers are partial or caveated; do not present them as complete evidence-backed totals."
 	} else if gate != nil && gate.Policy.RequireBudgetReady && !gate.SafeToReportBudget {
 		report.HermesTrustSummary.RequiredUserWarning = "Budget/deal evidence is not ready; do not present this plan as within budget or deal-optimized."
+	} else if gate != nil && !gate.SafeToSatisfyIntent {
+		report.HermesTrustSummary.RequiredUserWarning = "Request constraints are not fully satisfied; do not claim the meal plan matches the user's request until the constraint report is resolved."
 	}
 }
 
@@ -797,6 +835,7 @@ type basketAuditSummary struct {
 	HasCookWarning        bool
 	HasNutritionWarning   bool
 	HasBudgetRepairMarker bool
+	HasIntentWarning      bool
 	HasAllPantryMarker    bool
 }
 
@@ -820,6 +859,9 @@ func classifyBasketText(text string) basketAuditSummary {
 		}
 		if strings.Contains(upper, "BUDGET REPAIR ACTIONS") || strings.Contains(upper, "BUDGET REPAIR:") {
 			summary.HasBudgetRepairMarker = true
+		}
+		if strings.Contains(upper, "REQUEST CONSTRAINTS") || strings.Contains(upper, "REQUEST IS NOT FULLY SATISFIED") {
+			summary.HasIntentWarning = true
 		}
 		if strings.Contains(upper, "NO ALCAMPO ITEMS NEEDED") || strings.Contains(upper, "ALL REQUIRED INGREDIENTS ARE COVERED BY PANTRY") {
 			summary.HasAllPantryMarker = true
@@ -881,6 +923,9 @@ func expectedGenerationExitCode(gate ReadinessGate) int {
 		return ReadinessExitBlocked
 	}
 	if gate.Policy.RequireBudgetReady && !gate.SafeToReportBudget {
+		return ReadinessExitBlocked
+	}
+	if gate.Policy.RequireIntentReady && !gate.SafeToSatisfyIntent {
 		return ReadinessExitBlocked
 	}
 	if gate.Policy.RequireSafeBasket && !gate.SafeToBuild {

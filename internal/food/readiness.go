@@ -35,13 +35,17 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	gate.RecipeSetFingerprint = firstNonEmptyString(run.RecipeSetFingerprint, RecipeSetFingerprint(run.MealPlan))
 	gate.RecipeQualityFingerprint = run.RecipeQualityFingerprint
 	gate.RecipeImageFingerprint = run.RecipeImageFingerprint
+	gate.IntentFingerprint = run.IntentFingerprint
+	gate.ConstraintSatisfactionFingerprint = run.ConstraintSatisfactionFingerprint
 	gate.BudgetRepairFingerprint = run.BudgetRepairFingerprint
 	gate.BudgetDealFingerprint = run.BudgetDealFingerprint
 	gate.SafeToCook = true
 	gate.SafeToUseRecipes = true
 	gate.SafeToReportDeals = true
+	gate.SafeToSatisfyIntent = true
 	gate.CookReadinessStatus = string(ReadinessReadyExact)
 	gate.SafeToReportNutrition = false
+	gate.IntentStatus = string(ConstraintSatisfactionNotRun)
 	gate.BudgetRepairStatus = string(BudgetRepairNotRun)
 	gate.BudgetDealStatus = string(BudgetDealNotRun)
 	gate.BudgetStatus = BudgetStatusNotSet
@@ -95,6 +99,16 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 			gate.BudgetDealFingerprint = run.BudgetDealReport.BudgetDealFingerprint
 		}
 	}
+	if run.ConstraintSatisfactionReport != nil {
+		gate.IntentStatus = string(run.ConstraintSatisfactionReport.Status)
+		gate.SafeToSatisfyIntent = run.ConstraintSatisfactionReport.ClaimGuard.MayClaimRequestSatisfied
+		if gate.IntentFingerprint == "" {
+			gate.IntentFingerprint = run.ConstraintSatisfactionReport.IntentFingerprint
+		}
+		if gate.ConstraintSatisfactionFingerprint == "" {
+			gate.ConstraintSatisfactionFingerprint = run.ConstraintSatisfactionReport.ConstraintSatisfactionFingerprint
+		}
+	}
 
 	checkMealPlanFingerprints(&gate, run)
 	checkLedgerComplete(&gate, run)
@@ -110,6 +124,7 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	checkPantryReadiness(&gate, run)
 	checkNutritionReadiness(&gate, run)
 	checkBudgetDealReadiness(&gate, run)
+	checkIntentReadiness(&gate, run)
 
 	buildBlocked := buildBlockingCount > 0
 	if !buildBlocked {
@@ -126,6 +141,10 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 			gate.Status = ReadinessReadyWithCaveats
 			gate.ExitCode = ReadinessExitBlocked
 			gate.ExitReason = "budget reporting is not ready"
+		} else if gate.Policy.RequireIntentReady && !gate.SafeToSatisfyIntent {
+			gate.Status = ReadinessReadyWithCaveats
+			gate.ExitCode = ReadinessExitBlocked
+			gate.ExitReason = "request constraints are not satisfied"
 		} else {
 			gate.ExitCode = ReadinessExitOK
 			gate.ExitReason = "basket is safe to build"
@@ -171,6 +190,12 @@ func ApplyReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) ReadinessG
 		}
 		if run.RecipeImageFingerprint == "" {
 			run.RecipeImageFingerprint = gate.RecipeImageFingerprint
+		}
+		if run.IntentFingerprint == "" {
+			run.IntentFingerprint = gate.IntentFingerprint
+		}
+		if run.ConstraintSatisfactionFingerprint == "" {
+			run.ConstraintSatisfactionFingerprint = gate.ConstraintSatisfactionFingerprint
 		}
 		if run.BudgetDealFingerprint == "" {
 			run.BudgetDealFingerprint = gate.BudgetDealFingerprint
@@ -370,6 +395,49 @@ func checkBudgetDealReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
 		}
 		gate.addWarning(firstNonEmptyString(warning.Code, "budget_deal_warning"), "budget", GateIssue{ProductID: warning.ProductID, ProductName: warning.ProductName, Message: warning.Message, Remediation: warning.Remediation})
 	}
+}
+
+func checkIntentReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
+	if run.ConstraintSatisfactionReport == nil {
+		gate.IntentStatus = string(ConstraintSatisfactionNotRun)
+		gate.SafeToSatisfyIntent = true
+		if gate.Policy.RequireIntentReady {
+			gate.SafeToSatisfyIntent = false
+			gate.addWarning("constraint_report_missing", "intent", GateIssue{Message: "Request-constraint readiness is required but the constraint satisfaction report is missing.", Remediation: "Rerun with --intent-file or explicit intent flags plus --constraint-report-out."})
+		} else {
+			gate.addCheck("constraint_report_not_run", true, "info", "Request constraints were not provided; no request-satisfaction promise was made.")
+		}
+		return
+	}
+	report := run.ConstraintSatisfactionReport
+	gate.IntentStatus = string(report.Status)
+	gate.IntentFingerprint = firstNonEmptyString(gate.IntentFingerprint, report.IntentFingerprint)
+	gate.ConstraintSatisfactionFingerprint = firstNonEmptyString(gate.ConstraintSatisfactionFingerprint, report.ConstraintSatisfactionFingerprint)
+	gate.SafeToSatisfyIntent = report.ClaimGuard.MayClaimRequestSatisfied
+	if report.ConstraintSatisfactionFingerprint != "" {
+		expected := ConstraintSatisfactionFingerprint(*report)
+		if expected != "" && report.ConstraintSatisfactionFingerprint != expected {
+			gate.SafeToSatisfyIntent = false
+			gate.addWarning("stale_constraint_report", "intent", GateIssue{Message: "Constraint satisfaction report fingerprint does not match the embedded report.", Remediation: "Regenerate the constraint report after final food run changes."})
+			return
+		}
+	}
+	if run.MealRunIntent != nil && report.IntentFingerprint != "" && report.IntentFingerprint != run.MealRunIntent.IntentFingerprint {
+		gate.SafeToSatisfyIntent = false
+		gate.addWarning("stale_intent_fingerprint", "intent", GateIssue{Message: "Constraint report intent fingerprint does not match the embedded meal-run intent.", Remediation: "Regenerate constraint evidence from the final intent file."})
+		return
+	}
+	if !report.ClaimGuard.MayClaimRequestSatisfied {
+		message := firstNonEmptyString(report.ClaimGuard.PrimaryFailureMessage, "Final run does not prove the user's request constraints were satisfied.")
+		remediation := "Review constraint_satisfaction_report before claiming the request was satisfied."
+		gate.addWarning(firstNonEmptyString(report.ClaimGuard.PrimaryFailureCode, "intent_not_satisfied"), "intent", GateIssue{Message: message, Remediation: remediation})
+		return
+	}
+	if report.Status == ConstraintSatisfactionPassWithWarning {
+		gate.addCheck("intent_satisfied_with_warnings", true, "warning", "Request constraints are satisfied with caveated soft preferences.")
+		return
+	}
+	gate.addCheck("intent_satisfied", true, "info", "Request constraints are satisfied.")
 }
 
 func checkRecipeQualityReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
@@ -1037,6 +1105,10 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 			out = append(out, fmt.Sprintf("# Safe to report budget: %t", gate.SafeToReportBudget))
 			out = append(out, fmt.Sprintf("# Safe to report deals: %t", gate.SafeToReportDeals))
 		}
+		if gate.IntentStatus != "" && gate.IntentStatus != string(ConstraintSatisfactionNotRun) {
+			out = append(out, "# Request constraints: "+gate.IntentStatus)
+			out = append(out, fmt.Sprintf("# Safe to claim request satisfied: %t", gate.SafeToSatisfyIntent))
+		}
 		if !gate.SafeToCook {
 			out = append(out, "# BASKET CAN BE BUILT, BUT MEAL PLAN IS NOT COOK-READY")
 			out = append(out, "# Do not rely on this basket alone for cooking.")
@@ -1048,6 +1120,10 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 		if gate.Policy.RequireBudgetReady && !gate.SafeToReportBudget {
 			out = append(out, "# BASKET CAN BE BUILT, BUT BUDGET REPORTING IS NOT READY")
 			out = append(out, "# Do not present this basket as within budget yet.")
+		}
+		if !gate.SafeToSatisfyIntent {
+			out = append(out, "# BASKET CAN BE BUILT, BUT THE REQUEST IS NOT FULLY SATISFIED")
+			out = append(out, "# Do not claim the user's request constraints were met.")
 		}
 		if len(gate.Warnings) > 0 {
 			out = append(out, "# Caveats:")
@@ -1426,7 +1502,7 @@ func formatSignedCents(cents int) string {
 }
 
 func ReadinessSummaryLine(gate ReadinessGate) string {
-	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\tbudget_repair=%s\tbudget=%t\tbudget_status=%s\tdeals=%t\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), firstNonEmptyString(gate.BudgetRepairStatus, "-"), gate.SafeToReportBudget, firstNonEmptyString(gate.BudgetStatus, "-"), gate.SafeToReportDeals, gate.ExitCode)
+	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\tintent=%t\tintent_status=%s\tbudget_repair=%s\tbudget=%t\tbudget_status=%s\tdeals=%t\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), gate.SafeToSatisfyIntent, firstNonEmptyString(gate.IntentStatus, "-"), firstNonEmptyString(gate.BudgetRepairStatus, "-"), gate.SafeToReportBudget, firstNonEmptyString(gate.BudgetStatus, "-"), gate.SafeToReportDeals, gate.ExitCode)
 }
 
 func minInt(a, b int) int {

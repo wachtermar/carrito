@@ -296,6 +296,32 @@ func printBudgetRepairPlan(w io.Writer, plan food.BudgetRepairPlan) {
 	}
 }
 
+func printConstraintSatisfaction(w io.Writer, report food.ConstraintSatisfactionReport) {
+	fmt.Fprintf(w, "constraints\tstatus=%s\tclaim=%t\thard=%d/%d\tfailed=%d\tunknown=%d\tsoft_unknown=%d\n",
+		report.Status,
+		report.ClaimGuard.MayClaimRequestSatisfied,
+		report.Summary.HardSatisfiedCount,
+		report.Summary.HardConstraintCount,
+		report.Summary.HardFailedCount,
+		report.Summary.HardUnknownCount,
+		report.Summary.SoftUnknownCount,
+	)
+	printed := 0
+	for _, check := range report.Checks {
+		if check.Status == food.ConstraintCheckSatisfied {
+			continue
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s\n", check.Status, check.ID, check.Message)
+		printed++
+		if printed >= 8 {
+			break
+		}
+	}
+	if report.ClaimGuard.RequiredUserWarning != "" {
+		fmt.Fprintf(w, "  warning\t%s\n", report.ClaimGuard.RequiredUserWarning)
+	}
+}
+
 func printServingSummary(w io.Writer, plan food.ServingPlan, scaled *food.ScaledMealPlan) {
 	fmt.Fprintf(w, "serving\tstatus=%s\ttarget=%.3g\tcooked=%.3g\tscaled_slots=%d\n",
 		plan.Status,

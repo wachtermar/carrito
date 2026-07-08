@@ -206,6 +206,9 @@ func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
 	if artifact.ReadinessGate != nil {
 		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
 	}
+	if artifact.ConstraintSatisfactionReport != nil {
+		lines = append(lines, constraintSatisfactionPDFLines(*artifact.ConstraintSatisfactionReport)...)
+	}
 	if artifact.BudgetRepairPlan != nil {
 		lines = append(lines, budgetRepairPDFLines(*artifact.BudgetRepairPlan)...)
 	}
@@ -298,6 +301,9 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 	if gate.BudgetDealStatus != "" {
 		lines = append(lines, "Budget/deal readiness: "+strings.ToUpper(gate.BudgetDealStatus), "Budget status: "+strings.ToUpper(strutil.FirstNonEmpty(gate.BudgetStatus, BudgetStatusNotSet)), fmt.Sprintf("Safe to report budget: %t", gate.SafeToReportBudget), fmt.Sprintf("Safe to report deals: %t", gate.SafeToReportDeals))
 	}
+	if gate.IntentStatus != "" && gate.IntentStatus != string(ConstraintSatisfactionNotRun) {
+		lines = append(lines, "Request constraints: "+strings.ToUpper(gate.IntentStatus), fmt.Sprintf("Safe to claim request satisfied: %t", gate.SafeToSatisfyIntent))
+	}
 	if !gate.SafeToBuild {
 		lines = append(lines, "Do not use this basket for shopping.")
 	}
@@ -382,6 +388,74 @@ func budgetDealPDFLines(report BudgetDealReport) []string {
 		}
 	}
 	return lines
+}
+
+func constraintSatisfactionPDFLines(report ConstraintSatisfactionReport) []string {
+	if report.Status == ConstraintSatisfactionNotRun {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Request constraints:",
+		"- Status: " + strings.ToUpper(string(report.Status)),
+		fmt.Sprintf("- Hard constraints: %d satisfied, %d failed, %d unknown", report.Summary.HardSatisfiedCount, report.Summary.HardFailedCount, report.Summary.HardUnknownCount),
+		fmt.Sprintf("- Soft preferences: %d satisfied, %d missed, %d unknown", report.Summary.SoftSatisfiedCount, report.Summary.SoftMissedCount, report.Summary.SoftUnknownCount),
+		fmt.Sprintf("- Safe to claim request satisfied: %t", report.ClaimGuard.MayClaimRequestSatisfied),
+	}
+	satisfied, notSatisfied, unknown := constraintPDFBuckets(report.Checks)
+	if len(satisfied) > 0 {
+		lines = append(lines, "- Satisfied:")
+		for _, item := range satisfied {
+			lines = append(lines, "  - "+item)
+		}
+	}
+	if len(notSatisfied) > 0 {
+		lines = append(lines, "- Not satisfied:")
+		for _, item := range notSatisfied {
+			lines = append(lines, "  - "+item)
+		}
+	}
+	if len(unknown) > 0 {
+		lines = append(lines, "- Unknown:")
+		for _, item := range unknown {
+			lines = append(lines, "  - "+item)
+		}
+	}
+	if report.ClaimGuard.RequiredUserWarning != "" {
+		lines = append(lines, "- User warning: "+report.ClaimGuard.RequiredUserWarning)
+	}
+	for _, issue := range report.BlockingIssues {
+		if issue.Message != "" {
+			lines = append(lines, "- Constraint blocker: "+issue.Message)
+		}
+	}
+	for _, issue := range report.Warnings {
+		if issue.Message != "" {
+			lines = append(lines, "- Constraint caveat: "+issue.Message)
+		}
+	}
+	return lines
+}
+
+func constraintPDFBuckets(checks []ConstraintCheck) (satisfied, notSatisfied, unknown []string) {
+	for _, check := range checks {
+		label := firstNonEmptyString(check.Message, check.ID)
+		switch check.Status {
+		case ConstraintCheckSatisfied:
+			if len(satisfied) < 8 {
+				satisfied = append(satisfied, label)
+			}
+		case ConstraintCheckNotSatisfied:
+			if len(notSatisfied) < 8 {
+				notSatisfied = append(notSatisfied, label)
+			}
+		case ConstraintCheckUnknown:
+			if len(unknown) < 8 {
+				unknown = append(unknown, label)
+			}
+		}
+	}
+	return satisfied, notSatisfied, unknown
 }
 
 func budgetRepairPDFLines(plan BudgetRepairPlan) []string {

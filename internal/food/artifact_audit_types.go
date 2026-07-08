@@ -15,25 +15,27 @@ const (
 )
 
 const (
-	FoodArtifactRun                = "run"
-	FoodArtifactPlan               = "plan"
-	FoodArtifactShop               = "shop"
-	FoodArtifactPDF                = "pdf"
-	FoodArtifactBasket             = "basket"
-	FoodArtifactQuantityLedger     = "quantity_ledger"
-	FoodArtifactNutritionLedger    = "nutrition_ledger"
-	FoodArtifactServingPlan        = "serving_plan"
-	FoodArtifactScaledMealPlan     = "scaled_mealplan"
-	FoodArtifactPantry             = "pantry"
-	FoodArtifactPantryConsumption  = "pantry_consumption"
-	FoodArtifactReadiness          = "readiness"
-	FoodArtifactRecovery           = "recovery"
-	FoodArtifactRecipeSwap         = "recipe_swap"
-	FoodArtifactBasketOptimization = "basket_optimization"
-	FoodArtifactRecipeIntake       = "recipe_intake"
-	FoodArtifactRecipeQuality      = "recipe_quality"
-	FoodArtifactBudgetRepair       = "budget_repair"
-	FoodArtifactBudgetDeal         = "budget_deal"
+	FoodArtifactRun                    = "run"
+	FoodArtifactPlan                   = "plan"
+	FoodArtifactShop                   = "shop"
+	FoodArtifactPDF                    = "pdf"
+	FoodArtifactBasket                 = "basket"
+	FoodArtifactQuantityLedger         = "quantity_ledger"
+	FoodArtifactNutritionLedger        = "nutrition_ledger"
+	FoodArtifactServingPlan            = "serving_plan"
+	FoodArtifactScaledMealPlan         = "scaled_mealplan"
+	FoodArtifactPantry                 = "pantry"
+	FoodArtifactPantryConsumption      = "pantry_consumption"
+	FoodArtifactReadiness              = "readiness"
+	FoodArtifactRecovery               = "recovery"
+	FoodArtifactRecipeSwap             = "recipe_swap"
+	FoodArtifactBasketOptimization     = "basket_optimization"
+	FoodArtifactRecipeIntake           = "recipe_intake"
+	FoodArtifactRecipeQuality          = "recipe_quality"
+	FoodArtifactIntent                 = "intent"
+	FoodArtifactConstraintSatisfaction = "constraint_satisfaction"
+	FoodArtifactBudgetRepair           = "budget_repair"
+	FoodArtifactBudgetDeal             = "budget_deal"
 )
 
 type FoodRunManifest struct {
@@ -59,21 +61,23 @@ type FoodRunManifest struct {
 }
 
 type FoodRunFingerprintSummary struct {
-	MealPlan          string `json:"mealplan,omitempty"`
-	ProductSelection  string `json:"product_selection,omitempty"`
-	HouseholdProfile  string `json:"household_profile,omitempty"`
-	ServingPlan       string `json:"serving_plan,omitempty"`
-	ScaledMealPlan    string `json:"scaled_mealplan,omitempty"`
-	PantryProfile     string `json:"pantry_profile,omitempty"`
-	PantryResolution  string `json:"pantry_resolution,omitempty"`
-	ShopRequirements  string `json:"shop_requirements,omitempty"`
-	NutritionLedger   string `json:"nutrition_ledger,omitempty"`
-	RecipeSet         string `json:"recipe_set,omitempty"`
-	RecipeQuality     string `json:"recipe_quality,omitempty"`
-	RecipeImage       string `json:"recipe_image,omitempty"`
-	BudgetRepair      string `json:"budget_repair,omitempty"`
-	BudgetDeal        string `json:"budget_deal,omitempty"`
-	PrePantryMealPlan string `json:"pre_pantry_mealplan,omitempty"`
+	MealPlan               string `json:"mealplan,omitempty"`
+	ProductSelection       string `json:"product_selection,omitempty"`
+	HouseholdProfile       string `json:"household_profile,omitempty"`
+	ServingPlan            string `json:"serving_plan,omitempty"`
+	ScaledMealPlan         string `json:"scaled_mealplan,omitempty"`
+	PantryProfile          string `json:"pantry_profile,omitempty"`
+	PantryResolution       string `json:"pantry_resolution,omitempty"`
+	ShopRequirements       string `json:"shop_requirements,omitempty"`
+	NutritionLedger        string `json:"nutrition_ledger,omitempty"`
+	RecipeSet              string `json:"recipe_set,omitempty"`
+	RecipeQuality          string `json:"recipe_quality,omitempty"`
+	RecipeImage            string `json:"recipe_image,omitempty"`
+	Intent                 string `json:"intent,omitempty"`
+	ConstraintSatisfaction string `json:"constraint_satisfaction,omitempty"`
+	BudgetRepair           string `json:"budget_repair,omitempty"`
+	BudgetDeal             string `json:"budget_deal,omitempty"`
+	PrePantryMealPlan      string `json:"pre_pantry_mealplan,omitempty"`
 }
 
 type FoodRunManifestReadiness struct {
@@ -86,6 +90,8 @@ type FoodRunManifestReadiness struct {
 	SafeToReportNutrition bool   `json:"safe_to_report_nutrition"`
 	RecipeQualityStatus   string `json:"recipe_quality_status,omitempty"`
 	SafeToUseRecipes      bool   `json:"safe_to_use_recipes"`
+	IntentStatus          string `json:"intent_status,omitempty"`
+	SafeToSatisfyIntent   bool   `json:"safe_to_satisfy_intent"`
 	BudgetRepairStatus    string `json:"budget_repair_status,omitempty"`
 	BudgetDealStatus      string `json:"budget_deal_status,omitempty"`
 	BudgetStatus          string `json:"budget_status,omitempty"`
@@ -100,6 +106,7 @@ type FoodRunManifestReadiness struct {
 	StrictRecipeQuality   bool   `json:"strict_recipe_quality,omitempty"`
 	RequireRecipeImages   bool   `json:"require_recipe_images,omitempty"`
 	RequireBudgetReady    bool   `json:"require_budget_ready,omitempty"`
+	RequireIntentReady    bool   `json:"require_intent_ready,omitempty"`
 }
 
 type FoodRunManifestOptions struct {
@@ -170,22 +177,25 @@ type ArtifactAuditSummary struct {
 	SafeToUseRecipes        bool   `json:"safe_to_use_recipes"`
 	SafeToReportBudget      bool   `json:"safe_to_report_budget"`
 	SafeToReportDeals       bool   `json:"safe_to_report_deals"`
+	SafeToSatisfyIntent     bool   `json:"safe_to_satisfy_intent"`
 	BasketActionability     string `json:"basket_actionability,omitempty"`
 	PDFTrustSectionsPresent bool   `json:"pdf_trust_sections_present"`
 }
 
 type HermesTrustSummary struct {
-	Trustworthy                 bool   `json:"trustworthy"`
-	MayPresentBasketAsReady     bool   `json:"may_present_basket_as_ready"`
-	MayPresentCookReady         bool   `json:"may_present_cook_ready"`
-	MayPresentNutritionNumbers  bool   `json:"may_present_nutrition_numbers"`
-	MayPresentRecipesAsCookable bool   `json:"may_present_recipes_as_cookable"`
-	MayPresentBudgetAsReady     bool   `json:"may_present_budget_as_ready"`
-	MayPresentDealsAsReady      bool   `json:"may_present_deals_as_ready"`
-	MayPresentPDFAsComplete     bool   `json:"may_present_pdf_as_complete"`
-	RequiredUserWarning         string `json:"required_user_warning,omitempty"`
-	PrimaryFailureCode          string `json:"primary_failure_code,omitempty"`
-	PrimaryFailureMessage       string `json:"primary_failure_message,omitempty"`
+	Trustworthy                  bool   `json:"trustworthy"`
+	MayPresentBasketAsReady      bool   `json:"may_present_basket_as_ready"`
+	MayPresentCookReady          bool   `json:"may_present_cook_ready"`
+	MayPresentNutritionNumbers   bool   `json:"may_present_nutrition_numbers"`
+	MayPresentRecipesAsCookable  bool   `json:"may_present_recipes_as_cookable"`
+	MayPresentBudgetAsReady      bool   `json:"may_present_budget_as_ready"`
+	MayPresentDealsAsReady       bool   `json:"may_present_deals_as_ready"`
+	MayPresentPDFAsComplete      bool   `json:"may_present_pdf_as_complete"`
+	MayPresentRequestAsSatisfied bool   `json:"may_present_request_as_satisfied"`
+	MayPresentIntentWarnings     bool   `json:"may_present_intent_warnings"`
+	RequiredUserWarning          string `json:"required_user_warning,omitempty"`
+	PrimaryFailureCode           string `json:"primary_failure_code,omitempty"`
+	PrimaryFailureMessage        string `json:"primary_failure_message,omitempty"`
 }
 
 type ArtifactAuditMetrics struct {
