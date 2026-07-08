@@ -22,6 +22,7 @@ type ReadinessPolicy struct {
 	RequireRecipeImages          bool `json:"require_recipe_images"`
 	RequireBudgetReady           bool `json:"require_budget_ready"`
 	RequireIntentReady           bool `json:"require_intent_ready"`
+	RequireFreshProductEvidence  bool `json:"require_fresh_product_evidence"`
 }
 
 type ReadinessGate struct {
@@ -39,6 +40,7 @@ type ReadinessGate struct {
 	PantryResolutionFingerprint       string                    `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint       string                    `json:"shop_requirements_fingerprint,omitempty"`
 	NutritionLedgerFingerprint        string                    `json:"nutrition_ledger_fingerprint,omitempty"`
+	ProductEvidenceFingerprint        string                    `json:"product_evidence_fingerprint,omitempty"`
 	RecipeSetFingerprint              string                    `json:"recipe_set_fingerprint,omitempty"`
 	RecipeQualityFingerprint          string                    `json:"recipe_quality_fingerprint,omitempty"`
 	RecipeImageFingerprint            string                    `json:"recipe_image_fingerprint,omitempty"`
@@ -52,6 +54,8 @@ type ReadinessGate struct {
 	CookReadinessStatus               string                    `json:"cook_readiness_status,omitempty"`
 	SafeToUseRecipes                  bool                      `json:"safe_to_use_recipes"`
 	RecipeQualityStatus               string                    `json:"recipe_quality_status,omitempty"`
+	ProductEvidenceStatus             string                    `json:"product_evidence_status,omitempty"`
+	SafeToUseProductEvidence          bool                      `json:"safe_to_use_product_evidence"`
 	BudgetRepairStatus                string                    `json:"budget_repair_status,omitempty"`
 	BudgetDealStatus                  string                    `json:"budget_deal_status,omitempty"`
 	BudgetStatus                      string                    `json:"budget_status,omitempty"`

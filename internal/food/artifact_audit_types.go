@@ -22,6 +22,7 @@ const (
 	FoodArtifactBasket                 = "basket"
 	FoodArtifactQuantityLedger         = "quantity_ledger"
 	FoodArtifactNutritionLedger        = "nutrition_ledger"
+	FoodArtifactProductEvidence        = "product_evidence"
 	FoodArtifactServingPlan            = "serving_plan"
 	FoodArtifactScaledMealPlan         = "scaled_mealplan"
 	FoodArtifactPantry                 = "pantry"
@@ -70,6 +71,7 @@ type FoodRunFingerprintSummary struct {
 	PantryResolution       string `json:"pantry_resolution,omitempty"`
 	ShopRequirements       string `json:"shop_requirements,omitempty"`
 	NutritionLedger        string `json:"nutrition_ledger,omitempty"`
+	ProductEvidence        string `json:"product_evidence,omitempty"`
 	RecipeSet              string `json:"recipe_set,omitempty"`
 	RecipeQuality          string `json:"recipe_quality,omitempty"`
 	RecipeImage            string `json:"recipe_image,omitempty"`
@@ -81,32 +83,35 @@ type FoodRunFingerprintSummary struct {
 }
 
 type FoodRunManifestReadiness struct {
-	Status                string `json:"status,omitempty"`
-	BasketStatus          string `json:"basket_status,omitempty"`
-	SafeToBuild           bool   `json:"safe_to_build"`
-	CookStatus            string `json:"cook_status,omitempty"`
-	SafeToCook            bool   `json:"safe_to_cook"`
-	NutritionStatus       string `json:"nutrition_status,omitempty"`
-	SafeToReportNutrition bool   `json:"safe_to_report_nutrition"`
-	RecipeQualityStatus   string `json:"recipe_quality_status,omitempty"`
-	SafeToUseRecipes      bool   `json:"safe_to_use_recipes"`
-	IntentStatus          string `json:"intent_status,omitempty"`
-	SafeToSatisfyIntent   bool   `json:"safe_to_satisfy_intent"`
-	BudgetRepairStatus    string `json:"budget_repair_status,omitempty"`
-	BudgetDealStatus      string `json:"budget_deal_status,omitempty"`
-	BudgetStatus          string `json:"budget_status,omitempty"`
-	SafeToReportBudget    bool   `json:"safe_to_report_budget"`
-	SafeToReportDeals     bool   `json:"safe_to_report_deals"`
-	GenerationExitCode    int    `json:"generation_exit_code"`
-	GenerationExitReason  string `json:"generation_exit_reason,omitempty"`
-	FinalLedgerStatus     string `json:"final_ledger_status,omitempty"`
-	RequireSafeBasket     bool   `json:"require_safe_basket,omitempty"`
-	RequireCookReady      bool   `json:"require_cook_ready,omitempty"`
-	RequireNutritionReady bool   `json:"require_nutrition_ready,omitempty"`
-	StrictRecipeQuality   bool   `json:"strict_recipe_quality,omitempty"`
-	RequireRecipeImages   bool   `json:"require_recipe_images,omitempty"`
-	RequireBudgetReady    bool   `json:"require_budget_ready,omitempty"`
-	RequireIntentReady    bool   `json:"require_intent_ready,omitempty"`
+	Status                      string `json:"status,omitempty"`
+	BasketStatus                string `json:"basket_status,omitempty"`
+	SafeToBuild                 bool   `json:"safe_to_build"`
+	CookStatus                  string `json:"cook_status,omitempty"`
+	SafeToCook                  bool   `json:"safe_to_cook"`
+	NutritionStatus             string `json:"nutrition_status,omitempty"`
+	SafeToReportNutrition       bool   `json:"safe_to_report_nutrition"`
+	ProductEvidenceStatus       string `json:"product_evidence_status,omitempty"`
+	SafeToUseProductEvidence    bool   `json:"safe_to_use_product_evidence"`
+	RecipeQualityStatus         string `json:"recipe_quality_status,omitempty"`
+	SafeToUseRecipes            bool   `json:"safe_to_use_recipes"`
+	IntentStatus                string `json:"intent_status,omitempty"`
+	SafeToSatisfyIntent         bool   `json:"safe_to_satisfy_intent"`
+	BudgetRepairStatus          string `json:"budget_repair_status,omitempty"`
+	BudgetDealStatus            string `json:"budget_deal_status,omitempty"`
+	BudgetStatus                string `json:"budget_status,omitempty"`
+	SafeToReportBudget          bool   `json:"safe_to_report_budget"`
+	SafeToReportDeals           bool   `json:"safe_to_report_deals"`
+	GenerationExitCode          int    `json:"generation_exit_code"`
+	GenerationExitReason        string `json:"generation_exit_reason,omitempty"`
+	FinalLedgerStatus           string `json:"final_ledger_status,omitempty"`
+	RequireSafeBasket           bool   `json:"require_safe_basket,omitempty"`
+	RequireCookReady            bool   `json:"require_cook_ready,omitempty"`
+	RequireNutritionReady       bool   `json:"require_nutrition_ready,omitempty"`
+	StrictRecipeQuality         bool   `json:"strict_recipe_quality,omitempty"`
+	RequireRecipeImages         bool   `json:"require_recipe_images,omitempty"`
+	RequireBudgetReady          bool   `json:"require_budget_ready,omitempty"`
+	RequireIntentReady          bool   `json:"require_intent_ready,omitempty"`
+	RequireFreshProductEvidence bool   `json:"require_fresh_product_evidence,omitempty"`
 }
 
 type FoodRunManifestOptions struct {
@@ -166,36 +171,41 @@ type ArtifactAuditReport struct {
 }
 
 type ArtifactAuditSummary struct {
-	TotalChecks             int    `json:"total_checks"`
-	PassedChecks            int    `json:"passed_checks"`
-	WarningChecks           int    `json:"warning_checks"`
-	FailedChecks            int    `json:"failed_checks"`
-	ArtifactsChecked        int    `json:"artifacts_checked"`
-	SafeToBuild             bool   `json:"safe_to_build"`
-	SafeToCook              bool   `json:"safe_to_cook"`
-	SafeToReportNutrition   bool   `json:"safe_to_report_nutrition"`
-	SafeToUseRecipes        bool   `json:"safe_to_use_recipes"`
-	SafeToReportBudget      bool   `json:"safe_to_report_budget"`
-	SafeToReportDeals       bool   `json:"safe_to_report_deals"`
-	SafeToSatisfyIntent     bool   `json:"safe_to_satisfy_intent"`
-	BasketActionability     string `json:"basket_actionability,omitempty"`
-	PDFTrustSectionsPresent bool   `json:"pdf_trust_sections_present"`
+	TotalChecks              int    `json:"total_checks"`
+	PassedChecks             int    `json:"passed_checks"`
+	WarningChecks            int    `json:"warning_checks"`
+	FailedChecks             int    `json:"failed_checks"`
+	ArtifactsChecked         int    `json:"artifacts_checked"`
+	SafeToBuild              bool   `json:"safe_to_build"`
+	SafeToCook               bool   `json:"safe_to_cook"`
+	SafeToReportNutrition    bool   `json:"safe_to_report_nutrition"`
+	SafeToUseRecipes         bool   `json:"safe_to_use_recipes"`
+	SafeToReportBudget       bool   `json:"safe_to_report_budget"`
+	SafeToReportDeals        bool   `json:"safe_to_report_deals"`
+	SafeToSatisfyIntent      bool   `json:"safe_to_satisfy_intent"`
+	ProductEvidenceStatus    string `json:"product_evidence_status,omitempty"`
+	SafeToUseProductEvidence bool   `json:"safe_to_use_product_evidence"`
+	BasketActionability      string `json:"basket_actionability,omitempty"`
+	PDFTrustSectionsPresent  bool   `json:"pdf_trust_sections_present"`
 }
 
 type HermesTrustSummary struct {
-	Trustworthy                  bool   `json:"trustworthy"`
-	MayPresentBasketAsReady      bool   `json:"may_present_basket_as_ready"`
-	MayPresentCookReady          bool   `json:"may_present_cook_ready"`
-	MayPresentNutritionNumbers   bool   `json:"may_present_nutrition_numbers"`
-	MayPresentRecipesAsCookable  bool   `json:"may_present_recipes_as_cookable"`
-	MayPresentBudgetAsReady      bool   `json:"may_present_budget_as_ready"`
-	MayPresentDealsAsReady       bool   `json:"may_present_deals_as_ready"`
-	MayPresentPDFAsComplete      bool   `json:"may_present_pdf_as_complete"`
-	MayPresentRequestAsSatisfied bool   `json:"may_present_request_as_satisfied"`
-	MayPresentIntentWarnings     bool   `json:"may_present_intent_warnings"`
-	RequiredUserWarning          string `json:"required_user_warning,omitempty"`
-	PrimaryFailureCode           string `json:"primary_failure_code,omitempty"`
-	PrimaryFailureMessage        string `json:"primary_failure_message,omitempty"`
+	Trustworthy                         bool   `json:"trustworthy"`
+	MayPresentBasketAsReady             bool   `json:"may_present_basket_as_ready"`
+	MayPresentCookReady                 bool   `json:"may_present_cook_ready"`
+	MayPresentNutritionNumbers          bool   `json:"may_present_nutrition_numbers"`
+	MayPresentRecipesAsCookable         bool   `json:"may_present_recipes_as_cookable"`
+	MayPresentBudgetAsReady             bool   `json:"may_present_budget_as_ready"`
+	MayPresentDealsAsReady              bool   `json:"may_present_deals_as_ready"`
+	MayPresentPDFAsComplete             bool   `json:"may_present_pdf_as_complete"`
+	MayPresentRequestAsSatisfied        bool   `json:"may_present_request_as_satisfied"`
+	MayPresentAlcampoProductsAsCurrent  bool   `json:"may_present_alcampo_products_as_current"`
+	MayPresentProductPricesAsCurrent    bool   `json:"may_present_product_prices_as_current"`
+	MayPresentProductNutritionAsCurrent bool   `json:"may_present_product_nutrition_as_current"`
+	MayPresentIntentWarnings            bool   `json:"may_present_intent_warnings"`
+	RequiredUserWarning                 string `json:"required_user_warning,omitempty"`
+	PrimaryFailureCode                  string `json:"primary_failure_code,omitempty"`
+	PrimaryFailureMessage               string `json:"primary_failure_message,omitempty"`
 }
 
 type ArtifactAuditMetrics struct {

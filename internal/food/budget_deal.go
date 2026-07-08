@@ -39,6 +39,7 @@ type BudgetDealReport struct {
 	ScaledMealPlanFingerprint   string                         `json:"scaled_mealplan_fingerprint,omitempty"`
 	PantryResolutionFingerprint string                         `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint string                         `json:"shop_requirements_fingerprint,omitempty"`
+	ProductEvidenceFingerprint  string                         `json:"product_evidence_fingerprint,omitempty"`
 	BudgetRepairFingerprint     string                         `json:"budget_repair_fingerprint,omitempty"`
 	BudgetDealFingerprint       string                         `json:"budget_deal_fingerprint,omitempty"`
 	BudgetRaw                   string                         `json:"budget_raw,omitempty"`
@@ -127,6 +128,7 @@ func BuildBudgetDealReport(run FoodRunArtifact) BudgetDealReport {
 		ScaledMealPlanFingerprint:   scaledMealPlanFingerprintFromRun(&run),
 		PantryResolutionFingerprint: pantryResolutionFingerprintFromRun(&run),
 		ShopRequirementsFingerprint: shopRequirementsFingerprintFromRun(&run),
+		ProductEvidenceFingerprint:  run.ProductEvidenceFingerprint,
 		BudgetRepairFingerprint:     run.BudgetRepairFingerprint,
 		BudgetRaw:                   strings.TrimSpace(run.MealPlan.BudgetEUR),
 		BudgetStatus:                BudgetStatusNotSet,

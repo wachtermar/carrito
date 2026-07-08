@@ -221,21 +221,24 @@ type ProductOption struct {
 }
 
 type SelectedProduct struct {
-	Ingredient          Ingredient           `json:"ingredient"`
-	Product             ProductSummary       `json:"product,omitempty"`
-	PurchaseQuantity    string               `json:"purchase_quantity,omitempty"`
-	PackageCount        int                  `json:"package_count,omitempty"`
-	QuantityReason      string               `json:"quantity_reason,omitempty"`
-	LineTotal           money.Money          `json:"line_total,omitempty"`
-	SelectionReason     string               `json:"selection_reason,omitempty"`
-	Alternates          []ProductOption      `json:"alternates_considered,omitempty"`
-	Warnings            []string             `json:"warnings,omitempty"`
-	ProductNutrition    *StructuredNutrition `json:"product_nutrition,omitempty"`
-	RequiredNutrition   *NutritionEstimate   `json:"required_nutrition,omitempty"`
-	PurchasedNutrition  *NutritionEstimate   `json:"purchased_nutrition,omitempty"`
-	NutritionWarnings   []string             `json:"nutrition_warnings,omitempty"`
-	NutritionProvenance string               `json:"nutrition_provenance,omitempty"`
-	Error               string               `json:"error,omitempty"`
+	Ingredient               Ingredient           `json:"ingredient"`
+	Product                  ProductSummary       `json:"product,omitempty"`
+	PurchaseQuantity         string               `json:"purchase_quantity,omitempty"`
+	PackageCount             int                  `json:"package_count,omitempty"`
+	QuantityReason           string               `json:"quantity_reason,omitempty"`
+	LineTotal                money.Money          `json:"line_total,omitempty"`
+	SelectionReason          string               `json:"selection_reason,omitempty"`
+	Alternates               []ProductOption      `json:"alternates_considered,omitempty"`
+	Warnings                 []string             `json:"warnings,omitempty"`
+	ProductNutrition         *StructuredNutrition `json:"product_nutrition,omitempty"`
+	RequiredNutrition        *NutritionEstimate   `json:"required_nutrition,omitempty"`
+	PurchasedNutrition       *NutritionEstimate   `json:"purchased_nutrition,omitempty"`
+	NutritionWarnings        []string             `json:"nutrition_warnings,omitempty"`
+	NutritionProvenance      string               `json:"nutrition_provenance,omitempty"`
+	ProductEvidenceSource    string               `json:"product_evidence_source,omitempty"`
+	ProductEvidenceCheckedAt string               `json:"product_evidence_checked_at,omitempty"`
+	ProductEvidenceError     string               `json:"product_evidence_error,omitempty"`
+	Error                    string               `json:"error,omitempty"`
 }
 
 type ShoppingGroup struct {
@@ -282,6 +285,7 @@ type FoodRunArtifact struct {
 	RecipeSetFingerprint              string                        `json:"recipe_set_fingerprint,omitempty"`
 	RecipeQualityFingerprint          string                        `json:"recipe_quality_fingerprint,omitempty"`
 	RecipeImageFingerprint            string                        `json:"recipe_image_fingerprint,omitempty"`
+	ProductEvidenceFingerprint        string                        `json:"product_evidence_fingerprint,omitempty"`
 	IntentFingerprint                 string                        `json:"intent_fingerprint,omitempty"`
 	ConstraintSatisfactionFingerprint string                        `json:"constraint_satisfaction_fingerprint,omitempty"`
 	BudgetRepairFingerprint           string                        `json:"budget_repair_fingerprint,omitempty"`
@@ -297,6 +301,7 @@ type FoodRunArtifact struct {
 	NutritionLedger                   *NutritionLedger              `json:"nutrition_ledger,omitempty"`
 	RecipeIntakePlan                  *RecipeIntakePlan             `json:"recipe_intake_plan,omitempty"`
 	RecipeQualityReport               *RecipeQualityReport          `json:"recipe_quality_report,omitempty"`
+	ProductEvidenceReport             *ProductEvidenceReport        `json:"product_evidence_report,omitempty"`
 	MealRunIntent                     *MealRunIntent                `json:"meal_run_intent,omitempty"`
 	ConstraintSatisfactionReport      *ConstraintSatisfactionReport `json:"constraint_satisfaction_report,omitempty"`
 	PreBudgetRepairBudgetDealReport   *BudgetDealReport             `json:"pre_budget_repair_budget_deal_report,omitempty"`

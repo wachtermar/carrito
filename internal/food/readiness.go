@@ -35,6 +35,7 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	gate.RecipeSetFingerprint = firstNonEmptyString(run.RecipeSetFingerprint, RecipeSetFingerprint(run.MealPlan))
 	gate.RecipeQualityFingerprint = run.RecipeQualityFingerprint
 	gate.RecipeImageFingerprint = run.RecipeImageFingerprint
+	gate.ProductEvidenceFingerprint = run.ProductEvidenceFingerprint
 	gate.IntentFingerprint = run.IntentFingerprint
 	gate.ConstraintSatisfactionFingerprint = run.ConstraintSatisfactionFingerprint
 	gate.BudgetRepairFingerprint = run.BudgetRepairFingerprint
@@ -43,8 +44,10 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	gate.SafeToUseRecipes = true
 	gate.SafeToReportDeals = true
 	gate.SafeToSatisfyIntent = true
+	gate.SafeToUseProductEvidence = true
 	gate.CookReadinessStatus = string(ReadinessReadyExact)
 	gate.SafeToReportNutrition = false
+	gate.ProductEvidenceStatus = string(ProductEvidenceNotRun)
 	gate.IntentStatus = string(ConstraintSatisfactionNotRun)
 	gate.BudgetRepairStatus = string(BudgetRepairNotRun)
 	gate.BudgetDealStatus = string(BudgetDealNotRun)
@@ -109,8 +112,16 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 			gate.ConstraintSatisfactionFingerprint = run.ConstraintSatisfactionReport.ConstraintSatisfactionFingerprint
 		}
 	}
+	if run.ProductEvidenceReport != nil {
+		gate.ProductEvidenceStatus = string(run.ProductEvidenceReport.Status)
+		gate.SafeToUseProductEvidence = productEvidenceReportSafeToUse(*run.ProductEvidenceReport)
+		if gate.ProductEvidenceFingerprint == "" {
+			gate.ProductEvidenceFingerprint = run.ProductEvidenceReport.ProductEvidenceFingerprint
+		}
+	}
 
 	checkMealPlanFingerprints(&gate, run)
+	checkProductEvidenceReadiness(&gate, run)
 	checkLedgerComplete(&gate, run)
 	checkBasketSafety(&gate, run)
 	checkRecoveryRemaining(&gate, run)
@@ -133,6 +144,10 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 			gate.Status = ReadinessBlocked
 			gate.ExitCode = ReadinessExitBlocked
 			gate.ExitReason = "meal plan is not cook-ready"
+		} else if gate.Policy.RequireFreshProductEvidence && !gate.SafeToUseProductEvidence {
+			gate.Status = ReadinessReadyWithCaveats
+			gate.ExitCode = ReadinessExitBlocked
+			gate.ExitReason = "fresh product evidence is not ready"
 		} else if gate.Policy.RequireNutritionReady && !gate.SafeToReportNutrition {
 			gate.Status = ReadinessReadyWithCaveats
 			gate.ExitCode = ReadinessExitBlocked
@@ -182,6 +197,9 @@ func ApplyReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) ReadinessG
 		if run.NutritionLedgerFingerprint == "" {
 			run.NutritionLedgerFingerprint = gate.NutritionLedgerFingerprint
 		}
+		if run.ProductEvidenceFingerprint == "" {
+			run.ProductEvidenceFingerprint = gate.ProductEvidenceFingerprint
+		}
 		if run.RecipeSetFingerprint == "" {
 			run.RecipeSetFingerprint = gate.RecipeSetFingerprint
 		}
@@ -207,6 +225,7 @@ func ApplyReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) ReadinessG
 		run.BasketSafety.ServingPlanFingerprint = gate.ServingPlanFingerprint
 		run.BasketSafety.ScaledMealPlanFingerprint = gate.ScaledMealPlanFingerprint
 		run.BasketSafety.ProductSelectionFingerprint = gate.ProductSelectionFingerprint
+		run.BasketSafety.ProductEvidenceFingerprint = gate.ProductEvidenceFingerprint
 		run.BasketSafety.PantryResolutionFingerprint = gate.PantryResolutionFingerprint
 		run.BasketSafety.ShopRequirementsFingerprint = gate.ShopRequirementsFingerprint
 		run.BasketSafety.SafeToBuild = gate.SafeToBuild
@@ -438,6 +457,81 @@ func checkIntentReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
 		return
 	}
 	gate.addCheck("intent_satisfied", true, "info", "Request constraints are satisfied.")
+}
+
+func checkProductEvidenceReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
+	if run.ProductEvidenceReport == nil {
+		gate.ProductEvidenceStatus = string(ProductEvidenceNotRun)
+		gate.SafeToUseProductEvidence = true
+		if gate.Policy.RequireFreshProductEvidence {
+			gate.SafeToUseProductEvidence = false
+			gate.addWarning("product_evidence_missing", "product_evidence", GateIssue{Message: "Fresh product evidence is required but product_evidence_report is missing.", Remediation: "Rerun with --refresh-product-evidence and --product-evidence-out."})
+		} else {
+			gate.addCheck("product_evidence_not_run", true, "info", "Final product evidence was not requested; current-product claims are not allowed.")
+		}
+		return
+	}
+	report := run.ProductEvidenceReport
+	gate.ProductEvidenceStatus = string(report.Status)
+	gate.ProductEvidenceFingerprint = firstNonEmptyString(gate.ProductEvidenceFingerprint, report.ProductEvidenceFingerprint)
+	gate.SafeToUseProductEvidence = productEvidenceReportSafeToUse(*report)
+	if report.ProductEvidenceFingerprint != "" {
+		expected := ProductEvidenceFingerprint(*report)
+		if expected != "" && expected != report.ProductEvidenceFingerprint {
+			gate.SafeToUseProductEvidence = false
+			gate.addBlocking("stale_product_evidence_report", "product_evidence", GateIssue{Message: "Product evidence report fingerprint does not match the embedded report.", Remediation: "Regenerate product evidence after final product changes."})
+			return
+		}
+	}
+	if report.ProductSelectionFingerprint != "" && gate.ProductSelectionFingerprint != "" && report.ProductSelectionFingerprint != gate.ProductSelectionFingerprint {
+		gate.SafeToUseProductEvidence = false
+		gate.addBlocking("stale_product_evidence_selection", "product_evidence", GateIssue{Message: "Product evidence report was generated for a different selected-product set.", Remediation: "Regenerate product evidence after final product selection changes."})
+		return
+	}
+	for _, issue := range report.BlockingIssues {
+		gate.SafeToUseProductEvidence = false
+		code := firstNonEmptyString(issue.Code, "product_evidence_blocked")
+		gateIssue := GateIssue{ProductID: issue.ProductID, ProductName: issue.ProductName, IngredientKey: issue.IngredientKey, IngredientName: issue.IngredientName, Message: issue.Message, Remediation: issue.Remediation}
+		if productEvidenceIssueBlocksBasket(code) {
+			gate.addBlocking(code, "product_evidence", gateIssue)
+		} else if gate.Policy.RequireFreshProductEvidence {
+			gate.addWarning(code, "product_evidence", gateIssue)
+		} else {
+			gate.addCheck(code, true, "warning", issue.Message)
+		}
+	}
+	for _, warning := range report.Warnings {
+		code := firstNonEmptyString(warning.Code, "product_evidence_warning")
+		if gate.Policy.RequireFreshProductEvidence {
+			gate.addWarning(code, "product_evidence", GateIssue{ProductID: warning.ProductID, ProductName: warning.ProductName, IngredientKey: warning.IngredientKey, IngredientName: warning.IngredientName, Message: warning.Message, Remediation: warning.Remediation})
+		} else {
+			gate.addCheck(code, true, "warning", warning.Message)
+		}
+	}
+	if gate.Policy.RequireFreshProductEvidence && !gate.SafeToUseProductEvidence {
+		gate.addWarning("fresh_product_evidence_not_ready", "product_evidence", GateIssue{Message: "Fresh Alcampo product evidence is not ready.", Remediation: "Refresh selected products before claiming current prices, products, or labels."})
+		return
+	}
+	if report.Status == ProductEvidenceNotNeeded {
+		gate.addCheck("product_evidence_not_needed", true, "info", "No selected Alcampo products needed final product evidence.")
+		return
+	}
+	if gate.SafeToUseProductEvidence {
+		gate.addCheck("product_evidence_ready", true, "info", "Final selected products have usable product evidence.")
+	}
+}
+
+func productEvidenceIssueBlocksBasket(code string) bool {
+	switch code {
+	case "product_unavailable", "product_evidence_missing":
+		return true
+	default:
+		return false
+	}
+}
+
+func productEvidenceReportSafeToUse(report ProductEvidenceReport) bool {
+	return report.Status == ProductEvidenceFreshComplete || report.Status == ProductEvidenceFreshPartial || report.Status == ProductEvidenceNotNeeded
 }
 
 func checkRecipeQualityReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
@@ -1096,6 +1190,14 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 			out = append(out, "# Recipe quality: "+gate.RecipeQualityStatus)
 			out = append(out, fmt.Sprintf("# Safe to use recipes: %t", gate.SafeToUseRecipes))
 		}
+		if gate.ProductEvidenceStatus != "" && gate.ProductEvidenceStatus != string(ProductEvidenceNotRun) {
+			out = append(out, "# Product evidence: "+gate.ProductEvidenceStatus)
+			out = append(out, fmt.Sprintf("# Safe to claim current Alcampo product evidence: %t", gate.SafeToUseProductEvidence))
+			if !gate.SafeToUseProductEvidence {
+				out = append(out, "# PRODUCT EVIDENCE WARNING")
+				out = append(out, "# Some selected products were not freshly verified against Alcampo.")
+			}
+		}
 		if gate.BudgetRepairStatus != "" && gate.BudgetRepairStatus != string(BudgetRepairNotRun) {
 			out = append(out, "# Budget repair: "+gate.BudgetRepairStatus)
 		}
@@ -1224,6 +1326,22 @@ func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionAndBudg
 
 func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionBudgetRepairAndBudgetDeal(lines []string, gate *ReadinessGate, swapPlan *RecipeSwapPlan, optimizationPlan *BasketOptimizationPlan, pantry *PantryResolution, serving *ServingPlan, scaled *ScaledMealPlan, nutrition *NutritionLedger, budgetRepair *BudgetRepairPlan, budgetDeal *BudgetDealReport) []string {
 	out := ReadinessBasketLinesWithRecipeSwapAndOptimization(lines, gate, swapPlan, optimizationPlan)
+	if gate != nil {
+		productLines := productEvidenceBasketLines(*gate)
+		if len(productLines) > 0 {
+			insertAt := 0
+			if gate.SafeToBuild {
+				insertAt = minInt(len(out), 6)
+			} else {
+				insertAt = minInt(len(out), 3)
+			}
+			next := make([]string, 0, len(out)+len(productLines))
+			next = append(next, out[:insertAt]...)
+			next = append(next, productLines...)
+			next = append(next, out[insertAt:]...)
+			out = next
+		}
+	}
 	if gate != nil && budgetRepair != nil && budgetRepair.Status != BudgetRepairNotRun {
 		repairLines := budgetRepairBasketLines(*budgetRepair)
 		if len(repairLines) > 0 {
@@ -1306,6 +1424,24 @@ func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionBudgetR
 	next = append(next, pantryLines...)
 	next = append(next, out[insertAt:]...)
 	return next
+}
+
+func productEvidenceBasketLines(gate ReadinessGate) []string {
+	status := firstNonEmptyString(gate.ProductEvidenceStatus, string(ProductEvidenceNotRun))
+	if status == string(ProductEvidenceNotRun) && !gate.Policy.RequireFreshProductEvidence {
+		return nil
+	}
+	lines := []string{
+		"# Final Alcampo product evidence: " + status,
+		fmt.Sprintf("# Safe to use product evidence: %t", gate.SafeToUseProductEvidence),
+	}
+	if gate.ProductEvidenceFingerprint != "" {
+		lines = append(lines, "# Product evidence fingerprint: "+gate.ProductEvidenceFingerprint)
+	}
+	if gate.Policy.RequireFreshProductEvidence && !gate.SafeToUseProductEvidence {
+		lines = append(lines, "# PRODUCT EVIDENCE IS NOT READY: do not claim current Alcampo products, prices, or product-label nutrition.")
+	}
+	return lines
 }
 
 func budgetRepairBasketLines(plan BudgetRepairPlan) []string {

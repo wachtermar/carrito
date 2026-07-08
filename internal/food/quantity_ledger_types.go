@@ -28,6 +28,7 @@ type QuantityLedger struct {
 	ServingPlanFingerprint      string                        `json:"serving_plan_fingerprint,omitempty"`
 	ScaledMealPlanFingerprint   string                        `json:"scaled_mealplan_fingerprint,omitempty"`
 	ProductSelectionFingerprint string                        `json:"product_selection_fingerprint,omitempty"`
+	ProductEvidenceFingerprint  string                        `json:"product_evidence_fingerprint,omitempty"`
 	PantryResolutionFingerprint string                        `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint string                        `json:"shop_requirements_fingerprint,omitempty"`
 	Requirements                []IngredientRequirement       `json:"requirements,omitempty"`
@@ -61,6 +62,7 @@ type BasketSafety struct {
 	ServingPlanFingerprint      string             `json:"serving_plan_fingerprint,omitempty"`
 	ScaledMealPlanFingerprint   string             `json:"scaled_mealplan_fingerprint,omitempty"`
 	ProductSelectionFingerprint string             `json:"product_selection_fingerprint,omitempty"`
+	ProductEvidenceFingerprint  string             `json:"product_evidence_fingerprint,omitempty"`
 	PantryResolutionFingerprint string             `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint string             `json:"shop_requirements_fingerprint,omitempty"`
 }

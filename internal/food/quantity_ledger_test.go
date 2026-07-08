@@ -70,6 +70,17 @@ func TestParsePackageEvidenceSpanishGroceryFixtures(t *testing.T) {
 	}
 }
 
+func TestParsePackageEvidencePrefersVisibleLiquidVolumeOverConflictingSize(t *testing.T) {
+	got := ParsePackageEvidence("250g", "KIKKOMAN Salsa de soja bajo en sal frasco de 250 ml.")
+	if got.NetQuantity == nil {
+		t.Fatalf("missing net quantity: %+v", got)
+	}
+	assertNear(t, "base value", got.NetQuantity.Expected.BaseValue, 250)
+	if got.NetQuantity.Expected.BaseUnit != "ml" {
+		t.Fatalf("base unit = %q, want ml: %+v", got.NetQuantity.Expected.BaseUnit, got)
+	}
+}
+
 func TestQuantityLedgerAggregatesSameProductAcrossIngredients(t *testing.T) {
 	plan := MealPlan{RequiredPurchases: []Ingredient{
 		{Name: "rice", Quantity: 300, Unit: "g"},

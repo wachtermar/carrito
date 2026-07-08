@@ -53,6 +53,7 @@ func BuildNutritionLedger(ctx context.Context, run *FoodRunArtifact, pantryProfi
 	ledger.PantryResolutionFingerprint = run.PantryResolutionFingerprint
 	ledger.ShopRequirementsFingerprint = run.ShopRequirementsFingerprint
 	ledger.ProductSelectionFingerprint = firstNonEmptyString(run.ProductSelectionFingerprint, ProductSelectionFingerprint(run.Shop))
+	ledger.ProductEvidenceFingerprint = run.ProductEvidenceFingerprint
 
 	if run.QuantityLedger == nil {
 		ledger.Status = NutritionLedgerBlocked

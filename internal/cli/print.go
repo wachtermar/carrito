@@ -264,6 +264,38 @@ func printBudgetDealReport(w io.Writer, report food.BudgetDealReport) {
 	}
 }
 
+func printProductEvidenceReport(w io.Writer, report food.ProductEvidenceReport) {
+	fmt.Fprintf(w, "product_evidence\tstatus=%s\tchecked=%d/%d\tfresh=%d\tcache=%d\tsearch_only=%d\tnutrition=%d\timages=%d\n",
+		report.Status,
+		report.Summary.LinesChecked,
+		report.Summary.SelectedProductLines,
+		report.Summary.FreshLines+report.Summary.SnapshotReplayLines,
+		report.Summary.CacheLines,
+		report.Summary.SearchOnlyLines,
+		report.Summary.LinesWithNutritionEvidence,
+		report.Summary.LinesWithImageEvidence,
+	)
+	if report.ProductEvidenceFingerprint != "" {
+		fmt.Fprintf(w, "  fingerprint\t%s\n", report.ProductEvidenceFingerprint)
+	}
+	for _, issue := range report.BlockingIssues {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  blocking\t%s\n", issue.Message)
+		}
+	}
+	printed := 0
+	for _, warning := range report.Warnings {
+		if warning.Message == "" {
+			continue
+		}
+		fmt.Fprintf(w, "  caveat\t%s\n", warning.Message)
+		printed++
+		if printed >= 5 {
+			break
+		}
+	}
+}
+
 func printBudgetRepairPlan(w io.Writer, plan food.BudgetRepairPlan) {
 	fmt.Fprintf(w, "budget_repair\tstatus=%s\tinitial=%s\tfinal=%s\tdecisions=%d\n",
 		plan.Status,

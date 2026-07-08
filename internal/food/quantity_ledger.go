@@ -35,6 +35,7 @@ type QuantityLedgerOptions struct {
 	ScaledMealPlanFingerprint    string
 	PantryResolutionFingerprint  string
 	ShopRequirementsFingerprint  string
+	ProductEvidenceFingerprint   string
 	PantryResolution             *PantryResolution
 }
 
@@ -55,14 +56,19 @@ func EnrichShopResultProducts(ctx context.Context, shop ShopResult, fetcher Prod
 		if selected.Error != "" || selected.Product.Name == "" {
 			continue
 		}
+		selected.ProductEvidenceSource = ProductEvidenceSourceEmbeddedSelection
+		selected.ProductEvidenceCheckedAt = nowStamp()
+		selected.ProductEvidenceError = ""
 		if opts.EnrichProducts && fetcher != nil {
 			detail, source, err := productDetailForSelection(ctx, fetcher, selected.Product, opts)
 			if err != nil {
 				selected.Warnings = append(selected.Warnings, "Product detail enrichment unavailable; using search result data: "+err.Error())
+				selected.ProductEvidenceError = err.Error()
 			} else {
 				selected.Product = mergeProductSummary(selected.Product, detail)
 				if source != "" {
 					selected.NutritionProvenance = source
+					selected.ProductEvidenceSource = source
 				}
 			}
 		}
@@ -106,6 +112,7 @@ func BuildQuantityLedger(plan MealPlan, shop ShopResult, opts QuantityLedgerOpti
 		ServingPlanFingerprint:      strings.TrimSpace(opts.ServingPlanFingerprint),
 		ScaledMealPlanFingerprint:   strings.TrimSpace(opts.ScaledMealPlanFingerprint),
 		ProductSelectionFingerprint: ProductSelectionFingerprint(shop),
+		ProductEvidenceFingerprint:  strings.TrimSpace(opts.ProductEvidenceFingerprint),
 		PantryResolutionFingerprint: strings.TrimSpace(opts.PantryResolutionFingerprint),
 		ShopRequirementsFingerprint: strings.TrimSpace(opts.ShopRequirementsFingerprint),
 		Requirements:                requirements,
@@ -146,6 +153,7 @@ func BasketSafetyFromLedger(ledger QuantityLedger, opts QuantityLedgerOptions) B
 			ServingPlanFingerprint:      ledger.ServingPlanFingerprint,
 			ScaledMealPlanFingerprint:   ledger.ScaledMealPlanFingerprint,
 			ProductSelectionFingerprint: ledger.ProductSelectionFingerprint,
+			ProductEvidenceFingerprint:  ledger.ProductEvidenceFingerprint,
 			PantryResolutionFingerprint: ledger.PantryResolutionFingerprint,
 			ShopRequirementsFingerprint: ledger.ShopRequirementsFingerprint,
 		}
@@ -161,6 +169,7 @@ func BasketSafetyFromLedger(ledger QuantityLedger, opts QuantityLedgerOptions) B
 				ServingPlanFingerprint:      ledger.ServingPlanFingerprint,
 				ScaledMealPlanFingerprint:   ledger.ScaledMealPlanFingerprint,
 				ProductSelectionFingerprint: ledger.ProductSelectionFingerprint,
+				ProductEvidenceFingerprint:  ledger.ProductEvidenceFingerprint,
 				PantryResolutionFingerprint: ledger.PantryResolutionFingerprint,
 				ShopRequirementsFingerprint: ledger.ShopRequirementsFingerprint,
 			}
@@ -175,6 +184,7 @@ func BasketSafetyFromLedger(ledger QuantityLedger, opts QuantityLedgerOptions) B
 			ServingPlanFingerprint:      ledger.ServingPlanFingerprint,
 			ScaledMealPlanFingerprint:   ledger.ScaledMealPlanFingerprint,
 			ProductSelectionFingerprint: ledger.ProductSelectionFingerprint,
+			ProductEvidenceFingerprint:  ledger.ProductEvidenceFingerprint,
 			PantryResolutionFingerprint: ledger.PantryResolutionFingerprint,
 			ShopRequirementsFingerprint: ledger.ShopRequirementsFingerprint,
 		}
@@ -188,6 +198,7 @@ func BasketSafetyFromLedger(ledger QuantityLedger, opts QuantityLedgerOptions) B
 			ServingPlanFingerprint:      ledger.ServingPlanFingerprint,
 			ScaledMealPlanFingerprint:   ledger.ScaledMealPlanFingerprint,
 			ProductSelectionFingerprint: ledger.ProductSelectionFingerprint,
+			ProductEvidenceFingerprint:  ledger.ProductEvidenceFingerprint,
 			PantryResolutionFingerprint: ledger.PantryResolutionFingerprint,
 			ShopRequirementsFingerprint: ledger.ShopRequirementsFingerprint,
 		}
@@ -201,6 +212,7 @@ func BasketSafetyFromLedger(ledger QuantityLedger, opts QuantityLedgerOptions) B
 			ServingPlanFingerprint:      ledger.ServingPlanFingerprint,
 			ScaledMealPlanFingerprint:   ledger.ScaledMealPlanFingerprint,
 			ProductSelectionFingerprint: ledger.ProductSelectionFingerprint,
+			ProductEvidenceFingerprint:  ledger.ProductEvidenceFingerprint,
 			PantryResolutionFingerprint: ledger.PantryResolutionFingerprint,
 			ShopRequirementsFingerprint: ledger.ShopRequirementsFingerprint,
 		}
@@ -287,17 +299,12 @@ func ParsePackageEvidence(values ...string) PackageEvidence {
 		}
 	}
 	if ev.NetQuantity == nil {
-		if m := ledgerSimpleQuantityRE.FindStringSubmatch(text); len(m) == 3 {
-			qty, ok := parsePackageNumber(m[1])
-			unit := normalizeUnit(m[2])
-			if ok && unit != "" {
-				q := normalizedQuantity(m[0], qty, unit, fixedPackageConfidence(ev, 0.85), "single_package_quantity")
-				ev.NetQuantity = quantityRange(q, !ev.VariableWeight && !ev.ApproximateWeight, quantityRangeReason(ev))
-				ev.SalesUnit = packageSalesUnit(q.BaseUnit)
-				ev.BaseUnit = q.BaseUnit
-				ev.Confidence = q.Confidence
-				ev.ParseMethod = q.ParseMethod
-			}
+		if q, ok := bestSimplePackageQuantity(rawTexts, ev); ok {
+			ev.NetQuantity = quantityRange(q, !ev.VariableWeight && !ev.ApproximateWeight, quantityRangeReason(ev))
+			ev.SalesUnit = packageSalesUnit(q.BaseUnit)
+			ev.BaseUnit = q.BaseUnit
+			ev.Confidence = q.Confidence
+			ev.ParseMethod = q.ParseMethod
 		}
 	}
 	if ev.NetQuantity == nil {
@@ -310,6 +317,62 @@ func ParsePackageEvidence(values ...string) PackageEvidence {
 		}
 	}
 	return ev
+}
+
+type packageQuantityCandidate struct {
+	quantity NormalizedQuantity
+	source   string
+	index    int
+}
+
+func bestSimplePackageQuantity(rawTexts []string, ev PackageEvidence) (NormalizedQuantity, bool) {
+	var candidates []packageQuantityCandidate
+	for i, raw := range rawTexts {
+		text := normalizeLedgerQuantityText(raw)
+		for _, m := range ledgerSimpleQuantityRE.FindAllStringSubmatch(text, -1) {
+			if len(m) != 3 {
+				continue
+			}
+			qty, ok := parsePackageNumber(m[1])
+			unit := normalizeUnit(m[2])
+			if !ok || unit == "" {
+				continue
+			}
+			q := normalizedQuantity(m[0], qty, unit, fixedPackageConfidence(ev, 0.85), "single_package_quantity")
+			if q.BaseUnit == "" {
+				continue
+			}
+			candidates = append(candidates, packageQuantityCandidate{quantity: q, source: text, index: i})
+		}
+	}
+	if len(candidates) == 0 {
+		return NormalizedQuantity{}, false
+	}
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if packageQuantityCandidatePreferred(best, c) {
+			best = c
+		}
+	}
+	return best.quantity, true
+}
+
+func packageQuantityCandidatePreferred(current, candidate packageQuantityCandidate) bool {
+	if current.quantity.BaseUnit == candidate.quantity.BaseUnit {
+		return false
+	}
+	if current.quantity.BaseUnit == "g" && candidate.quantity.BaseUnit == "ml" && liquidPackageText(candidate.source) {
+		return true
+	}
+	return false
+}
+
+func liquidPackageText(text string) bool {
+	return strings.Contains(text, " ml") ||
+		strings.Contains(text, " litro") ||
+		strings.Contains(text, " litros") ||
+		strings.Contains(text, " l ") ||
+		strings.HasSuffix(text, " l")
 }
 
 func productDetailForSelection(ctx context.Context, fetcher ProductDetailFetcher, product ProductSummary, opts QuantityLedgerOptions) (alcampo.Product, string, error) {

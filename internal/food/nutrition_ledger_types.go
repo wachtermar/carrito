@@ -44,6 +44,7 @@ type NutritionLedger struct {
 	PantryResolutionFingerprint string                           `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint string                           `json:"shop_requirements_fingerprint,omitempty"`
 	ProductSelectionFingerprint string                           `json:"product_selection_fingerprint,omitempty"`
+	ProductEvidenceFingerprint  string                           `json:"product_evidence_fingerprint,omitempty"`
 	Coverage                    NutritionCoverageSummary         `json:"coverage"`
 	IngredientLines             []NutritionIngredientLine        `json:"ingredient_lines,omitempty"`
 	MealSummaries               []NutritionMealSummary           `json:"meal_summaries,omitempty"`

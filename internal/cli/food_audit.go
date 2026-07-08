@@ -76,6 +76,7 @@ func validateFoodAuditContextMode(mode string) error {
 func printArtifactAudit(stdout io.Writer, report food.ArtifactAuditReport) {
 	fmt.Fprintf(stdout, "audit\tstatus=%s\tmode=%s\trecommended_exit=%d\n", report.Status, report.Mode, report.RecommendedExitCode)
 	fmt.Fprintf(stdout, "trust\ttrustworthy=%t\tbasket=%t\tcook=%t\tnutrition=%t\trecipes=%t\tpdf=%t\n", report.HermesTrustSummary.Trustworthy, report.HermesTrustSummary.MayPresentBasketAsReady, report.HermesTrustSummary.MayPresentCookReady, report.HermesTrustSummary.MayPresentNutritionNumbers, report.HermesTrustSummary.MayPresentRecipesAsCookable, report.HermesTrustSummary.MayPresentPDFAsComplete)
+	fmt.Fprintf(stdout, "product_trust\tcurrent_products=%t\tcurrent_prices=%t\tcurrent_product_nutrition=%t\tstatus=%s\n", report.HermesTrustSummary.MayPresentAlcampoProductsAsCurrent, report.HermesTrustSummary.MayPresentProductPricesAsCurrent, report.HermesTrustSummary.MayPresentProductNutritionAsCurrent, report.Summary.ProductEvidenceStatus)
 	if report.HermesTrustSummary.RequiredUserWarning != "" {
 		fmt.Fprintf(stdout, "warning\t%s\n", report.HermesTrustSummary.RequiredUserWarning)
 	}
@@ -137,7 +138,7 @@ func defaultFoodRunManifestPath(runPath, auditPath string) string {
 	return ""
 }
 
-func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledgerOut, nutritionLedgerOut, intentOut, constraintReportOut, budgetRepairOut, budgetDealOut, servingPlanOut, scaledMealPlanOut, pantryOut, pantryConsumptionOut, readinessOut, recoveryOut, recipeSwapOut, basketOptimizationOut, recipeIntakeOut, recipeQualityOut string) map[string]string {
+func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledgerOut, nutritionLedgerOut, productEvidenceOut, intentOut, constraintReportOut, budgetRepairOut, budgetDealOut, servingPlanOut, scaledMealPlanOut, pantryOut, pantryConsumptionOut, readinessOut, recoveryOut, recipeSwapOut, basketOptimizationOut, recipeIntakeOut, recipeQualityOut string) map[string]string {
 	paths := map[string]string{}
 	add := func(key, path string) {
 		path = strings.TrimSpace(path)
@@ -155,6 +156,7 @@ func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledger
 	add(food.FoodArtifactBasket, basketPath)
 	add(food.FoodArtifactQuantityLedger, ledgerOut)
 	add(food.FoodArtifactNutritionLedger, nutritionLedgerOut)
+	add(food.FoodArtifactProductEvidence, productEvidenceOut)
 	add(food.FoodArtifactIntent, intentOut)
 	add(food.FoodArtifactConstraintSatisfaction, constraintReportOut)
 	add(food.FoodArtifactBudgetRepair, budgetRepairOut)

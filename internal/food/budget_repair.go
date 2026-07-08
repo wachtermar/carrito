@@ -162,6 +162,7 @@ func BudgetRepairBasketOptimizationOptions(opts BudgetRepairOptions) BasketOptim
 func AttachBudgetRepairPlan(artifact FoodRunArtifact, plan BudgetRepairPlan) FoodRunArtifact {
 	plan.MealPlanFingerprint = firstNonEmptyString(plan.MealPlanFingerprint, artifact.MealPlanFingerprint, MealPlanFingerprint(artifact.MealPlan))
 	plan.FinalProductSelection = firstNonEmptyString(plan.FinalProductSelection, artifact.ProductSelectionFingerprint, ProductSelectionFingerprint(artifact.Shop))
+	plan.FinalProductEvidence = firstNonEmptyString(plan.FinalProductEvidence, artifact.ProductEvidenceFingerprint)
 	plan.BudgetRepairFingerprint = BudgetRepairFingerprint(plan)
 	artifact.BudgetRepairPlan = &plan
 	artifact.BudgetRepairFingerprint = plan.BudgetRepairFingerprint
@@ -180,6 +181,7 @@ func FinalizeBudgetRepairPlan(artifact FoodRunArtifact, gate ReadinessGate) Food
 	}
 	plan.Final = budgetRepairSummaryFromReport(*report, artifact)
 	plan.FinalProductSelection = firstNonEmptyString(artifact.ProductSelectionFingerprint, ProductSelectionFingerprint(artifact.Shop))
+	plan.FinalProductEvidence = artifact.ProductEvidenceFingerprint
 	validation := BudgetRepairValidation{
 		SafeToBuild:           gate.SafeToBuild,
 		SafeToCook:            gate.SafeToCook,

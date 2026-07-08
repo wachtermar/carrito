@@ -206,6 +206,9 @@ func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
 	if artifact.ReadinessGate != nil {
 		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
 	}
+	if artifact.ProductEvidenceReport != nil {
+		lines = append(lines, productEvidencePDFLines(*artifact.ProductEvidenceReport)...)
+	}
 	if artifact.ConstraintSatisfactionReport != nil {
 		lines = append(lines, constraintSatisfactionPDFLines(*artifact.ConstraintSatisfactionReport)...)
 	}
@@ -326,6 +329,79 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 		}
 	}
 	return lines
+}
+
+func productEvidencePDFLines(report ProductEvidenceReport) []string {
+	if report.Status == ProductEvidenceNotRun {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Final Alcampo product evidence:",
+		"- Status: " + strings.ToUpper(string(report.Status)),
+		fmt.Sprintf("- Safe to claim current live products/prices: %t", productEvidenceCurrentClaimsSafe(report)),
+		fmt.Sprintf("- Checked selected products: %d of %d", report.Summary.LinesChecked, report.Summary.SelectedProductLines),
+		fmt.Sprintf("- Sources: fresh %d, snapshot %d, cache %d, search-only %d, missing %d", report.Summary.FreshLines, report.Summary.SnapshotReplayLines, report.Summary.CacheLines, report.Summary.SearchOnlyLines, report.Summary.MissingEvidenceLines),
+		fmt.Sprintf("- Coverage: price %d/%d, package %d/%d, nutrition %d/%d, image %d/%d", report.Summary.LinesWithPrice, report.Summary.SelectedProductLines, report.Summary.LinesWithPackageEvidence, report.Summary.SelectedProductLines, report.Summary.LinesWithNutritionEvidence, report.Summary.SelectedProductLines, report.Summary.LinesWithImageEvidence, report.Summary.SelectedProductLines),
+	}
+	if report.ProductEvidenceFingerprint != "" {
+		lines = append(lines, "- Evidence fingerprint: "+report.ProductEvidenceFingerprint)
+	}
+	if report.ProductSelectionFingerprint != "" {
+		lines = append(lines, "- Product selection fingerprint: "+report.ProductSelectionFingerprint)
+	}
+	for _, issue := range report.BlockingIssues {
+		if issue.Message != "" {
+			lines = append(lines, "- Product evidence blocker: "+issue.Message)
+		}
+	}
+	warningsPrinted := 0
+	for _, warning := range report.Warnings {
+		if warning.Message == "" {
+			continue
+		}
+		lines = append(lines, "- Product evidence caveat: "+warning.Message)
+		warningsPrinted++
+		if warningsPrinted >= 5 {
+			break
+		}
+	}
+	for i, line := range report.Lines {
+		if i >= 12 {
+			lines = append(lines, fmt.Sprintf("- %d more product evidence line(s) in JSON.", len(report.Lines)-i))
+			break
+		}
+		label := strutil.FirstNonEmpty(line.ProductName, line.SKU, line.ProductID, "selected product")
+		price := formatPDFMoney(line.Price.Amount, line.Price.Currency)
+		lines = append(lines, fmt.Sprintf("- %s: source=%s, availability=%s, price=%s, package=%s, nutrition=%s, image=%s", label, line.EvidenceSource, strutil.FirstNonEmpty(line.AvailabilityStatus, "unknown"), price, productEvidencePackageLabel(line.PackageEvidence), productEvidenceNutritionLabel(line), line.Image.Status))
+		if line.Image.URL != "" {
+			lines = append(lines, "  Product image: "+line.Image.URL)
+		}
+	}
+	return lines
+}
+
+func productEvidencePackageLabel(pkg PackageEvidence) string {
+	if pkg.NetQuantity == nil {
+		if len(pkg.RawTexts) > 0 {
+			return pkg.RawTexts[0]
+		}
+		return "missing"
+	}
+	if len(pkg.RawTexts) > 0 {
+		return pkg.RawTexts[0]
+	}
+	return formatNormalizedQuantity(pkg.NetQuantity.Expected)
+}
+
+func productEvidenceNutritionLabel(line ProductEvidenceLine) string {
+	if line.Nutrition == nil {
+		return "missing"
+	}
+	if line.Nutrition.Parsed {
+		return "parsed"
+	}
+	return "unparsed"
 }
 
 func budgetDealPDFLines(report BudgetDealReport) []string {

@@ -33,6 +33,45 @@ func TestArtifactAuditSafeBundlePasses(t *testing.T) {
 	}
 }
 
+func TestArtifactAuditProductEvidenceTrustFlags(t *testing.T) {
+	run := auditTestRun(t)
+	run.Shop.SelectedProducts[0].Product.ImageURL = "https://example.test/rice.png"
+	run.Shop.SelectedProducts[0].ProductEvidenceSource = "alcampo_product_detail"
+	run.Shop.SelectedProducts[0].ProductEvidenceCheckedAt = nowStamp()
+	policy := DefaultProductEvidencePolicy(true)
+	policy.RequireFreshEvidence = true
+	policy.AllowCacheEvidence = false
+	policy.AllowSearchOnlyEvidence = false
+	policy.RequirePriceEvidence = true
+	policy.RequireImageEvidence = true
+	productReport := BuildProductEvidenceReport(run, policy)
+	run = AttachProductEvidenceReport(run, productReport)
+	gate := ApplyReadinessGate(&run, ReadinessPolicy{RequireSafeBasket: true, RequireFreshProductEvidence: true})
+	run.ReadinessGate = &gate
+	paths := writeAuditBundle(t, run, nil)
+
+	report, err := AuditFoodRunArtifacts(ArtifactAuditOptions{
+		Mode:         ArtifactAuditModeFail,
+		ContextMode:  "ci",
+		ManifestPath: paths["manifest"],
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Status == ArtifactAuditStatusFail {
+		t.Fatalf("audit failed: %+v", report.BlockingIssues)
+	}
+	if !report.HermesTrustSummary.MayPresentAlcampoProductsAsCurrent || !report.HermesTrustSummary.MayPresentProductPricesAsCurrent {
+		t.Fatalf("current product trust flags not set: %+v", report.HermesTrustSummary)
+	}
+	if report.HermesTrustSummary.MayPresentProductNutritionAsCurrent {
+		t.Fatalf("product nutrition current flag should require product label coverage: %+v", report.HermesTrustSummary)
+	}
+	if report.Summary.ProductEvidenceStatus != string(ProductEvidenceFreshComplete) || !report.Summary.SafeToUseProductEvidence {
+		t.Fatalf("product evidence summary mismatch: %+v", report.Summary)
+	}
+}
+
 func TestArtifactAuditUnsafeBasketRejectsActionableLines(t *testing.T) {
 	run := auditTestRun(t)
 	run.ReadinessGate.SafeToBuild = false
@@ -295,6 +334,10 @@ func writeAuditBundle(t *testing.T, run FoodRunArtifact, mutateBeforeManifest fu
 		paths[FoodArtifactBudgetDeal] = filepath.Join(dir, "budget_deal.json")
 		writeAuditJSON(t, paths[FoodArtifactBudgetDeal], run.BudgetDealReport)
 	}
+	if run.ProductEvidenceReport != nil {
+		paths[FoodArtifactProductEvidence] = filepath.Join(dir, "product_evidence.json")
+		writeAuditJSON(t, paths[FoodArtifactProductEvidence], run.ProductEvidenceReport)
+	}
 	writeAuditJSON(t, paths[FoodArtifactRun], run)
 	if err := WritePDFFromJSONFile(paths[FoodArtifactRun], paths[FoodArtifactPDF]); err != nil {
 		t.Fatal(err)
@@ -335,6 +378,9 @@ func auditBundleArtifactPaths(paths map[string]string) map[string]string {
 	}
 	if paths[FoodArtifactBudgetDeal] != "" {
 		out[FoodArtifactBudgetDeal] = paths[FoodArtifactBudgetDeal]
+	}
+	if paths[FoodArtifactProductEvidence] != "" {
+		out[FoodArtifactProductEvidence] = paths[FoodArtifactProductEvidence]
 	}
 	return out
 }

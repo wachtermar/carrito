@@ -133,6 +133,7 @@ type BudgetRepairPlan struct {
 	MealPlanFingerprint      string                          `json:"mealplan_fingerprint,omitempty"`
 	BaselineProductSelection string                          `json:"baseline_product_selection_fingerprint,omitempty"`
 	FinalProductSelection    string                          `json:"final_product_selection_fingerprint,omitempty"`
+	FinalProductEvidence     string                          `json:"final_product_evidence_fingerprint,omitempty"`
 	Baseline                 BudgetRepairSummary             `json:"baseline"`
 	Final                    BudgetRepairSummary             `json:"final"`
 	CostDrivers              []BudgetCostDriver              `json:"cost_drivers,omitempty"`
