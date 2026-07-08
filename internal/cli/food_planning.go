@@ -12,6 +12,14 @@ import (
 	"github.com/wachtermar/carrito/internal/output"
 )
 
+type foodPlanOptions struct {
+	Days      int
+	People    int
+	BudgetEUR string
+	Meals     string
+	OutPath   string
+}
+
 func runFoodPlan(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food plan", stderr)
 	days := fs.Int("days", 3, "number of days")
@@ -23,33 +31,19 @@ func runFoodPlan(args []string, stdout, stderr io.Writer) error {
 	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
 		return err
 	}
-	profile, err := food.LoadProfile()
+	profile, pantry, err := loadFoodPlanningInputs()
 	if err != nil {
 		return err
 	}
-	pantry, err := food.LoadPantry()
-	if err != nil {
-		return err
-	}
-	plan, err := food.GenerateMealPlan(profile, pantry, food.PlanOptions{
+	plan, err := buildSavedFoodPlan(profile, pantry, foodPlanOptions{
 		Days:      *days,
 		People:    *people,
 		BudgetEUR: *budget,
-		MealTypes: splitList(*meals),
+		Meals:     *meals,
+		OutPath:   *outPath,
 	})
 	if err != nil {
 		return err
-	}
-	if *outPath != "" {
-		plan.File = *outPath
-		if err := writeJSONPath(*outPath, plan); err != nil {
-			return err
-		}
-	} else {
-		plan, err = food.SaveMealPlan(plan)
-		if err != nil {
-			return err
-		}
 	}
 	if *jsonOut {
 		return output.JSON(stdout, plan)
@@ -160,41 +154,20 @@ func runFoodShop(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	resolvedPolicy, updatedProfile, err := resolveFoodSelectionPolicy(&profile, *policy, stderr)
+	resolvedPolicy, err := resolveAndSaveFoodPolicy(&profile, *policy, stderr)
 	if err != nil {
 		return err
-	}
-	if updatedProfile {
-		if err := food.SaveProfile(profile); err != nil {
-			return err
-		}
 	}
 	plan, err := food.LoadMealPlan(fs.Arg(0))
 	if err != nil {
 		return err
 	}
-	cfg, client, err := newClient(*store)
+	result, err := shopFoodPlan(plan, profile, resolvedPolicy, *limit, *store)
 	if err != nil {
 		return err
 	}
-	regionID, err := resolveMarket(cfg, *store)
-	if err != nil {
+	if err := writeFoodShopOutputs(result, *outPath, *basketOut); err != nil {
 		return err
-	}
-	client.RegionID = regionID
-	result, err := food.ShopMealPlan(context.Background(), client, plan, profile, food.ShopOptions{Policy: resolvedPolicy, Limit: *limit})
-	if err != nil {
-		return err
-	}
-	if *outPath != "" {
-		if err := writeJSONPath(*outPath, result); err != nil {
-			return err
-		}
-	}
-	if *basketOut != "" {
-		if err := writeBasketLinesPath(*basketOut, result.BasketLines); err != nil {
-			return err
-		}
 	}
 	if *jsonOut {
 		return output.JSON(stdout, result)
@@ -248,83 +221,34 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
 		return err
 	}
-	profile, err := food.LoadProfile()
+	profile, pantry, err := loadFoodPlanningInputs()
 	if err != nil {
 		return err
 	}
-	resolvedPolicy, updatedProfile, err := resolveFoodSelectionPolicy(&profile, *policy, stderr)
+	resolvedPolicy, err := resolveAndSaveFoodPolicy(&profile, *policy, stderr)
 	if err != nil {
 		return err
 	}
-	if updatedProfile {
-		if err := food.SaveProfile(profile); err != nil {
-			return err
-		}
-	}
-	pantry, err := food.LoadPantry()
-	if err != nil {
-		return err
-	}
-	plan, err := food.GenerateMealPlan(profile, pantry, food.PlanOptions{
+	plan, err := buildSavedFoodPlan(profile, pantry, foodPlanOptions{
 		Days:      *days,
 		People:    *people,
 		BudgetEUR: *budget,
-		MealTypes: splitList(*meals),
+		Meals:     *meals,
+		OutPath:   *planOut,
 	})
 	if err != nil {
 		return err
 	}
-	if *planOut != "" {
-		plan.File = *planOut
-		if err := writeJSONPath(*planOut, plan); err != nil {
-			return err
-		}
-	} else {
-		plan, err = food.SaveMealPlan(plan)
-		if err != nil {
-			return err
-		}
-	}
-	cfg, client, err := newClient(*store)
+	shop, err := shopFoodPlan(plan, profile, resolvedPolicy, *limit, *store)
 	if err != nil {
 		return err
 	}
-	regionID, err := resolveMarket(cfg, *store)
-	if err != nil {
+	if err := writeFoodShopOutputs(shop, *shopOut, *basketOut); err != nil {
 		return err
 	}
-	client.RegionID = regionID
-	shop, err := food.ShopMealPlan(context.Background(), client, plan, profile, food.ShopOptions{Policy: resolvedPolicy, Limit: *limit})
+	pdfPath, err := writeFoodRunPDF(plan, shop, *shopOut, *pdfOut)
 	if err != nil {
 		return err
-	}
-	if *shopOut != "" {
-		if err := writeJSONPath(*shopOut, shop); err != nil {
-			return err
-		}
-	}
-	if *basketOut != "" {
-		if err := writeBasketLinesPath(*basketOut, shop.BasketLines); err != nil {
-			return err
-		}
-	}
-	pdfPath := ""
-	if *pdfOut != "" {
-		source := *shopOut
-		if source == "" {
-			dir, err := food.MealPlansDir()
-			if err != nil {
-				return err
-			}
-			source = filepath.Join(dir, plan.ID+"-shop.json")
-			if err := writeJSONPath(source, shop); err != nil {
-				return err
-			}
-		}
-		if err := food.WritePDFFromJSONFile(source, *pdfOut); err != nil {
-			return err
-		}
-		pdfPath = *pdfOut
 	}
 	res := struct {
 		MealPlan food.MealPlan   `json:"mealplan"`
@@ -344,4 +268,97 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "basket\t%s\n", *basketOut)
 	}
 	return nil
+}
+
+func loadFoodPlanningInputs() (food.Profile, food.Pantry, error) {
+	profile, err := food.LoadProfile()
+	if err != nil {
+		return food.Profile{}, food.Pantry{}, err
+	}
+	pantry, err := food.LoadPantry()
+	if err != nil {
+		return food.Profile{}, food.Pantry{}, err
+	}
+	return profile, pantry, nil
+}
+
+func buildSavedFoodPlan(profile food.Profile, pantry food.Pantry, opts foodPlanOptions) (food.MealPlan, error) {
+	plan, err := food.GenerateMealPlan(profile, pantry, food.PlanOptions{
+		Days:      opts.Days,
+		People:    opts.People,
+		BudgetEUR: opts.BudgetEUR,
+		MealTypes: splitList(opts.Meals),
+	})
+	if err != nil {
+		return food.MealPlan{}, err
+	}
+	if opts.OutPath != "" {
+		plan.File = opts.OutPath
+		if err := writeJSONPath(opts.OutPath, plan); err != nil {
+			return food.MealPlan{}, err
+		}
+		return plan, nil
+	}
+	return food.SaveMealPlan(plan)
+}
+
+func resolveAndSaveFoodPolicy(profile *food.Profile, explicit string, stderr io.Writer) (string, error) {
+	resolvedPolicy, updatedProfile, err := resolveFoodSelectionPolicy(profile, explicit, stderr)
+	if err != nil {
+		return "", err
+	}
+	if updatedProfile {
+		if err := food.SaveProfile(*profile); err != nil {
+			return "", err
+		}
+	}
+	return resolvedPolicy, nil
+}
+
+func shopFoodPlan(plan food.MealPlan, profile food.Profile, policy string, limit int, store string) (food.ShopResult, error) {
+	cfg, client, err := newClient(store)
+	if err != nil {
+		return food.ShopResult{}, err
+	}
+	regionID, err := resolveMarket(cfg, store)
+	if err != nil {
+		return food.ShopResult{}, err
+	}
+	client.RegionID = regionID
+	return food.ShopMealPlan(context.Background(), client, plan, profile, food.ShopOptions{Policy: policy, Limit: limit})
+}
+
+func writeFoodShopOutputs(shop food.ShopResult, outPath, basketOut string) error {
+	if outPath != "" {
+		if err := writeJSONPath(outPath, shop); err != nil {
+			return err
+		}
+	}
+	if basketOut != "" {
+		if err := writeBasketLinesPath(basketOut, shop.BasketLines); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFoodRunPDF(plan food.MealPlan, shop food.ShopResult, shopOut, pdfOut string) (string, error) {
+	if pdfOut == "" {
+		return "", nil
+	}
+	source := shopOut
+	if source == "" {
+		dir, err := food.MealPlansDir()
+		if err != nil {
+			return "", err
+		}
+		source = filepath.Join(dir, plan.ID+"-shop.json")
+		if err := writeJSONPath(source, shop); err != nil {
+			return "", err
+		}
+	}
+	if err := food.WritePDFFromJSONFile(source, pdfOut); err != nil {
+		return "", err
+	}
+	return pdfOut, nil
 }
