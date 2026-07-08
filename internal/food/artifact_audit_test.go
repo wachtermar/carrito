@@ -117,6 +117,34 @@ func TestArtifactAuditRecipeQualitySidecarMismatchFails(t *testing.T) {
 	}
 }
 
+func TestArtifactAuditBudgetDealSidecarMismatchFails(t *testing.T) {
+	run := auditTestRun(t)
+	report := BuildBudgetDealReport(run)
+	run = AttachBudgetDealReport(run, report)
+	gate := ApplyReadinessGate(&run, ReadinessPolicy{RequireSafeBasket: true})
+	run.ReadinessGate = &gate
+	paths := writeAuditBundle(t, run, func(paths map[string]string, run FoodRunArtifact) {
+		changed := *run.BudgetDealReport
+		changed.BudgetStatus = BudgetStatusOverBudget
+		writeAuditJSON(t, paths[FoodArtifactBudgetDeal], changed)
+	})
+
+	reportAudit, err := AuditFoodRunArtifacts(ArtifactAuditOptions{
+		Mode:         ArtifactAuditModeFail,
+		ContextMode:  "ci",
+		ManifestPath: paths["manifest"],
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reportAudit.Status != ArtifactAuditStatusFail {
+		t.Fatalf("status = %s, want fail", reportAudit.Status)
+	}
+	if !hasAuditIssue(reportAudit, "budget_deal_matches_embedded_run") {
+		t.Fatalf("expected budget/deal sidecar mismatch, got %+v", reportAudit.BlockingIssues)
+	}
+}
+
 func TestArtifactAuditSnapshotCorruptResponseFails(t *testing.T) {
 	run := auditTestRun(t)
 	paths := writeAuditBundle(t, run, nil)
@@ -263,6 +291,10 @@ func writeAuditBundle(t *testing.T, run FoodRunArtifact, mutateBeforeManifest fu
 		paths[FoodArtifactRecipeQuality] = filepath.Join(dir, "recipe_quality.json")
 		writeAuditJSON(t, paths[FoodArtifactRecipeQuality], run.RecipeQualityReport)
 	}
+	if run.BudgetDealReport != nil {
+		paths[FoodArtifactBudgetDeal] = filepath.Join(dir, "budget_deal.json")
+		writeAuditJSON(t, paths[FoodArtifactBudgetDeal], run.BudgetDealReport)
+	}
 	writeAuditJSON(t, paths[FoodArtifactRun], run)
 	if err := WritePDFFromJSONFile(paths[FoodArtifactRun], paths[FoodArtifactPDF]); err != nil {
 		t.Fatal(err)
@@ -300,6 +332,9 @@ func auditBundleArtifactPaths(paths map[string]string) map[string]string {
 	}
 	if paths[FoodArtifactRecipeQuality] != "" {
 		out[FoodArtifactRecipeQuality] = paths[FoodArtifactRecipeQuality]
+	}
+	if paths[FoodArtifactBudgetDeal] != "" {
+		out[FoodArtifactBudgetDeal] = paths[FoodArtifactBudgetDeal]
 	}
 	return out
 }

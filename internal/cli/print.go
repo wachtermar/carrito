@@ -237,6 +237,33 @@ func printReadinessGate(w io.Writer, gate food.ReadinessGate) {
 	}
 }
 
+func printBudgetDealReport(w io.Writer, report food.BudgetDealReport) {
+	fmt.Fprintf(w, "budget_deal\tstatus=%s\tbudget_status=%s\tsafe_budget=%t\tsafe_deals=%t\toffers=%d\tapplied=%d\tunclear=%d\tloyalty=%d\n",
+		report.Status,
+		report.BudgetStatus,
+		report.SafeToReportBudget,
+		report.SafeToReportDeals,
+		report.Summary.OfferCount,
+		report.Summary.AppliedOfferCount,
+		report.Summary.UnclearOfferCount,
+		report.Summary.LoyaltyOfferCount,
+	)
+	if report.Budget != nil {
+		fmt.Fprintf(w, "  budget\t%s %s\n", report.Budget.Amount, report.Budget.Currency)
+	}
+	if report.EstimatedTotal.Amount != "" {
+		fmt.Fprintf(w, "  estimated_total\t%s %s\n", report.EstimatedTotal.Amount, report.EstimatedTotal.Currency)
+	}
+	if report.Delta != nil {
+		fmt.Fprintf(w, "  budget_delta\t%s %s\n", report.Delta.Amount, report.Delta.Currency)
+	}
+	for _, warning := range report.Warnings {
+		if warning.Message != "" {
+			fmt.Fprintf(w, "  caveat\t%s\n", warning.Message)
+		}
+	}
+}
+
 func printServingSummary(w io.Writer, plan food.ServingPlan, scaled *food.ScaledMealPlan) {
 	fmt.Fprintf(w, "serving\tstatus=%s\ttarget=%.3g\tcooked=%.3g\tscaled_slots=%d\n",
 		plan.Status,

@@ -206,6 +206,9 @@ func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
 	if artifact.ReadinessGate != nil {
 		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
 	}
+	if artifact.BudgetDealReport != nil {
+		lines = append(lines, budgetDealPDFLines(*artifact.BudgetDealReport)...)
+	}
 	if artifact.RecipeQualityReport != nil {
 		lines = append(lines, recipeQualityPDFLines(*artifact.RecipeQualityReport)...)
 	}
@@ -286,6 +289,9 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 	if gate.RecipeQualityStatus != "" {
 		lines = append(lines, "Recipe quality: "+strings.ToUpper(gate.RecipeQualityStatus), fmt.Sprintf("Safe to use recipes: %t", gate.SafeToUseRecipes))
 	}
+	if gate.BudgetDealStatus != "" {
+		lines = append(lines, "Budget/deal readiness: "+strings.ToUpper(gate.BudgetDealStatus), "Budget status: "+strings.ToUpper(strutil.FirstNonEmpty(gate.BudgetStatus, BudgetStatusNotSet)), fmt.Sprintf("Safe to report budget: %t", gate.SafeToReportBudget), fmt.Sprintf("Safe to report deals: %t", gate.SafeToReportDeals))
+	}
 	if !gate.SafeToBuild {
 		lines = append(lines, "Do not use this basket for shopping.")
 	}
@@ -305,6 +311,68 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 		lines = append(lines, "Readiness caveats:")
 		for _, issue := range gate.Warnings {
 			lines = append(lines, "- "+issue.Message)
+		}
+	}
+	return lines
+}
+
+func budgetDealPDFLines(report BudgetDealReport) []string {
+	if report.Status == BudgetDealNotRun {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Budget and deal evidence:",
+		"- Status: " + strings.ToUpper(string(report.Status)),
+		"- Budget status: " + strings.ToUpper(strutil.FirstNonEmpty(report.BudgetStatus, BudgetStatusNotSet)),
+		"- Estimated shopping total: " + formatPDFMoney(report.EstimatedTotal.Amount, report.EstimatedTotal.Currency),
+	}
+	if report.Summary.SelectedProductCount > 0 {
+		lines = append(lines, fmt.Sprintf("- Price coverage: %d of %d selected lines", report.Summary.SelectedProductsWithPrice, report.Summary.SelectedProductCount))
+	}
+	if report.ConsumedCostEstimate.Cents > 0 || report.PackageExcessCostEstimate.Cents > 0 {
+		lines = append(lines, "- Consumed-cost estimate: "+formatPDFMoney(report.ConsumedCostEstimate.Amount, report.ConsumedCostEstimate.Currency))
+		lines = append(lines, "- Package-excess estimate: "+formatPDFMoney(report.PackageExcessCostEstimate.Amount, report.PackageExcessCostEstimate.Currency))
+	}
+	if report.CostBasis != "" {
+		lines = append(lines, "- Cost basis: "+strings.ReplaceAll(report.CostBasis, "_", " "))
+	}
+	if report.Budget != nil {
+		lines = append(lines, "- Budget target: "+formatPDFMoney(report.Budget.Amount, report.Budget.Currency))
+	}
+	if report.Delta != nil {
+		lines = append(lines, "- Budget delta: "+formatOptimizationCents(int(report.Delta.Cents)))
+	}
+	if report.DeltaPercent != 0 {
+		lines = append(lines, fmt.Sprintf("- Budget delta percent: %.2f%%", report.DeltaPercent))
+	}
+	lines = append(lines, fmt.Sprintf("- Offer evidence: %d offer(s), %d applied, %d unclear, %d loyalty-gated", report.Summary.OfferCount, report.Summary.AppliedOfferCount, report.Summary.UnclearOfferCount, report.Summary.LoyaltyOfferCount))
+	if report.Summary.RecognizedDealSavingsCents > 0 {
+		lines = append(lines, "- Recognized offer savings: "+money.FormatAmount(int64(report.Summary.RecognizedDealSavingsCents)))
+	}
+	if report.Optimization != nil {
+		lines = append(lines, "- Deal-aware optimization: "+strings.ToUpper(string(report.Optimization.Status)))
+		lines = append(lines, "- Optimization objective: "+strutil.FirstNonEmpty(report.Optimization.Objective, BasketObjectiveSafeBalanced))
+		if report.Optimization.SubtotalDelta.Cents != 0 {
+			lines = append(lines, "- Optimization subtotal delta: "+formatOptimizationCents(int(report.Optimization.SubtotalDelta.Cents)))
+		}
+		if report.Optimization.OfferSavings.Cents > 0 {
+			lines = append(lines, "- Optimization offer savings: "+money.FormatAmount(report.Optimization.OfferSavings.Cents))
+		}
+		lines = append(lines, fmt.Sprintf("- Optimization changed products: %d", report.Optimization.ChangedLines))
+	}
+	for _, offer := range report.OfferEvidence {
+		if offer.Text == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- Offer on %s: %s [%s]", strutil.FirstNonEmpty(offer.ProductName, offer.SKU, "selected product"), offer.Text, strutil.FirstNonEmpty(offer.Status, "unknown")))
+		if offer.Warning != "" {
+			lines = append(lines, "  Caveat: "+offer.Warning)
+		}
+	}
+	for _, warning := range report.Warnings {
+		if warning.Message != "" {
+			lines = append(lines, "- Caveat: "+warning.Message)
 		}
 	}
 	return lines

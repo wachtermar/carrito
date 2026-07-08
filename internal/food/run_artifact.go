@@ -85,6 +85,31 @@ func AttachRecipeQuality(artifact FoodRunArtifact, intake *RecipeIntakePlan, rep
 	return artifact
 }
 
+func AttachBudgetDealReport(artifact FoodRunArtifact, report BudgetDealReport) FoodRunArtifact {
+	if report.MealPlanFingerprint == "" {
+		report.MealPlanFingerprint = firstNonEmptyString(artifact.MealPlanFingerprint, MealPlanFingerprint(artifact.MealPlan))
+	}
+	if report.ProductSelectionFingerprint == "" {
+		report.ProductSelectionFingerprint = firstNonEmptyString(artifact.ProductSelectionFingerprint, ProductSelectionFingerprint(artifact.Shop))
+	}
+	if report.ServingPlanFingerprint == "" {
+		report.ServingPlanFingerprint = servingPlanFingerprintFromRun(&artifact)
+	}
+	if report.ScaledMealPlanFingerprint == "" {
+		report.ScaledMealPlanFingerprint = scaledMealPlanFingerprintFromRun(&artifact)
+	}
+	if report.PantryResolutionFingerprint == "" {
+		report.PantryResolutionFingerprint = pantryResolutionFingerprintFromRun(&artifact)
+	}
+	if report.ShopRequirementsFingerprint == "" {
+		report.ShopRequirementsFingerprint = shopRequirementsFingerprintFromRun(&artifact)
+	}
+	report.BudgetDealFingerprint = BudgetDealFingerprint(report)
+	artifact.BudgetDealReport = &report
+	artifact.BudgetDealFingerprint = report.BudgetDealFingerprint
+	return artifact
+}
+
 func MealPlanFingerprint(plan MealPlan) string {
 	type canonicalIngredient struct {
 		Name       string  `json:"name"`
@@ -206,6 +231,10 @@ func RefreshFoodRunArtifact(artifact FoodRunArtifact, meals []string) FoodRunArt
 	if artifact.RecipeIntakePlan != nil {
 		artifact.RecipeIntakePlan.RecipeSetFingerprint = artifact.RecipeSetFingerprint
 		artifact.RecipeIntakePlan.ActiveRecipeCount = activeRecipeCount(artifact.MealPlan)
+	}
+	if artifact.BudgetDealReport != nil {
+		report := BuildBudgetDealReport(artifact)
+		artifact = AttachBudgetDealReport(artifact, report)
 	}
 	if artifact.PantryResolution != nil {
 		artifact.PantryResolution.MealPlanFingerprint = artifact.MealPlanFingerprint

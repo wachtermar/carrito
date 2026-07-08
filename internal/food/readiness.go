@@ -35,10 +35,14 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	gate.RecipeSetFingerprint = firstNonEmptyString(run.RecipeSetFingerprint, RecipeSetFingerprint(run.MealPlan))
 	gate.RecipeQualityFingerprint = run.RecipeQualityFingerprint
 	gate.RecipeImageFingerprint = run.RecipeImageFingerprint
+	gate.BudgetDealFingerprint = run.BudgetDealFingerprint
 	gate.SafeToCook = true
 	gate.SafeToUseRecipes = true
+	gate.SafeToReportDeals = true
 	gate.CookReadinessStatus = string(ReadinessReadyExact)
 	gate.SafeToReportNutrition = false
+	gate.BudgetDealStatus = string(BudgetDealNotRun)
+	gate.BudgetStatus = BudgetStatusNotSet
 	if run.PantryResolution != nil {
 		gate.PantryStatus = string(run.PantryResolution.Status)
 	}
@@ -74,6 +78,15 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 			gate.RecipeImageFingerprint = run.RecipeQualityReport.RecipeImageFingerprint
 		}
 	}
+	if run.BudgetDealReport != nil {
+		gate.BudgetDealStatus = string(run.BudgetDealReport.Status)
+		gate.BudgetStatus = run.BudgetDealReport.BudgetStatus
+		gate.SafeToReportBudget = run.BudgetDealReport.SafeToReportBudget
+		gate.SafeToReportDeals = run.BudgetDealReport.SafeToReportDeals
+		if gate.BudgetDealFingerprint == "" {
+			gate.BudgetDealFingerprint = run.BudgetDealReport.BudgetDealFingerprint
+		}
+	}
 
 	checkMealPlanFingerprints(&gate, run)
 	checkLedgerComplete(&gate, run)
@@ -88,6 +101,7 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	checkServingReadiness(&gate, run)
 	checkPantryReadiness(&gate, run)
 	checkNutritionReadiness(&gate, run)
+	checkBudgetDealReadiness(&gate, run)
 
 	buildBlocked := buildBlockingCount > 0
 	if !buildBlocked {
@@ -100,6 +114,10 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 			gate.Status = ReadinessReadyWithCaveats
 			gate.ExitCode = ReadinessExitBlocked
 			gate.ExitReason = "nutrition reporting is not ready"
+		} else if gate.Policy.RequireBudgetReady && !gate.SafeToReportBudget {
+			gate.Status = ReadinessReadyWithCaveats
+			gate.ExitCode = ReadinessExitBlocked
+			gate.ExitReason = "budget reporting is not ready"
 		} else {
 			gate.ExitCode = ReadinessExitOK
 			gate.ExitReason = "basket is safe to build"
@@ -145,6 +163,9 @@ func ApplyReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) ReadinessG
 		}
 		if run.RecipeImageFingerprint == "" {
 			run.RecipeImageFingerprint = gate.RecipeImageFingerprint
+		}
+		if run.BudgetDealFingerprint == "" {
+			run.BudgetDealFingerprint = gate.BudgetDealFingerprint
 		}
 		run.BasketSafety.MealPlanFingerprint = gate.MealPlanFingerprint
 		run.BasketSafety.ServingPlanFingerprint = gate.ServingPlanFingerprint
@@ -259,6 +280,87 @@ func checkNutritionReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
 	}
 }
 
+func checkBudgetDealReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
+	if run.BudgetDealReport == nil {
+		gate.BudgetDealStatus = string(BudgetDealNotRun)
+		gate.BudgetStatus = BudgetStatusNotSet
+		gate.SafeToReportDeals = true
+		if gate.Policy.RequireBudgetReady {
+			gate.SafeToReportBudget = false
+			gate.addWarning("budget_deal_report_missing", "budget", GateIssue{Message: "Budget readiness is required but the budget/deal report is missing.", Remediation: "Rerun with budget/deal reporting enabled."})
+		} else {
+			gate.addCheck("budget_deal_report_not_run", true, "info", "Budget/deal evidence was not requested.")
+		}
+		return
+	}
+	report := run.BudgetDealReport
+	gate.BudgetDealStatus = string(report.Status)
+	gate.BudgetStatus = report.BudgetStatus
+	gate.SafeToReportBudget = report.SafeToReportBudget
+	gate.SafeToReportDeals = report.SafeToReportDeals
+	if gate.BudgetDealFingerprint == "" {
+		gate.BudgetDealFingerprint = report.BudgetDealFingerprint
+	}
+	if report.BudgetDealFingerprint != "" {
+		expected := BudgetDealFingerprint(*report)
+		if expected != "" && report.BudgetDealFingerprint != expected {
+			gate.SafeToReportBudget = false
+			gate.SafeToReportDeals = false
+			issue := GateIssue{Message: "Budget/deal report fingerprint does not match the embedded report.", Remediation: "Regenerate budget/deal evidence after final shopping changes."}
+			gate.addWarning("stale_budget_deal_report", "budget", issue)
+			return
+		}
+	}
+	if staleBudgetDealReport(run, gate) {
+		gate.SafeToReportBudget = false
+		gate.SafeToReportDeals = false
+		issue := GateIssue{Message: "Budget/deal report inputs do not match the final food run fingerprints.", Remediation: "Regenerate budget/deal evidence after serving, pantry, shopping, or product selections change."}
+		gate.addWarning("stale_budget_deal_inputs", "budget", issue)
+		return
+	}
+	switch report.Status {
+	case BudgetDealPass:
+		gate.addCheck("budget_deal_reportable", true, "info", "Budget/deal evidence is ready.")
+	case BudgetDealPassWithWarnings:
+		gate.addCheck("budget_deal_reportable_with_caveats", true, "warning", "Budget/deal evidence is ready with caveats.")
+	case BudgetDealOverBudget:
+		issue := GateIssue{Message: "Estimated shopping total exceeds the budget target.", Remediation: "Reduce recipe scope, optimize for lower price, use pantry coverage, or explicitly approve the over-budget plan."}
+		if len(report.Warnings) > 0 && report.Warnings[0].Message != "" {
+			issue.Message = report.Warnings[0].Message
+			issue.Remediation = report.Warnings[0].Remediation
+		}
+		gate.addWarning("budget_over_target", "budget", issue)
+	default:
+		gate.SafeToReportBudget = false
+		issue := GateIssue{Message: "Budget/deal evidence is not ready.", Remediation: "Review budget_deal_report before presenting budget or offer claims."}
+		gate.addWarning("budget_deal_not_ready", "budget", issue)
+	}
+	if gate.Policy.RequireBudgetReady {
+		if report.Summary.EstimatedVariableWeightLines > 0 && !gate.Policy.AllowEstimatedVariableWeight {
+			gate.SafeToReportBudget = false
+			gate.addWarning("budget_variable_weight_estimated", "budget", GateIssue{Message: "Budget readiness is required but the budget includes estimated variable-weight product lines.", Remediation: "Confirm final Alcampo weights or rerun with --allow-estimated-variable-weight when estimates are acceptable."})
+		}
+		switch report.BudgetStatus {
+		case BudgetStatusWithinBudget:
+		case BudgetStatusNotSet:
+			gate.SafeToReportBudget = false
+			gate.addWarning("budget_target_missing", "budget", GateIssue{Message: "Budget readiness is required but no budget target is set.", Remediation: "Pass --budget or save a profile budget before requiring budget readiness."})
+		case BudgetStatusUnparseable:
+			gate.SafeToReportBudget = false
+			gate.addWarning("budget_target_unparseable", "budget", GateIssue{Message: "Budget readiness is required but the budget target cannot be parsed.", Remediation: "Use a plain EUR amount such as 80 or 80.00."})
+		case BudgetStatusUnknownTotal:
+			gate.SafeToReportBudget = false
+			gate.addWarning("budget_total_missing", "budget", GateIssue{Message: "Budget readiness is required but the final estimated total is missing.", Remediation: "Refresh shopping selections before requiring budget readiness."})
+		}
+	}
+	for _, warning := range report.Warnings {
+		if warning.Code == "over_budget" {
+			continue
+		}
+		gate.addWarning(firstNonEmptyString(warning.Code, "budget_deal_warning"), "budget", GateIssue{ProductID: warning.ProductID, ProductName: warning.ProductName, Message: warning.Message, Remediation: warning.Remediation})
+	}
+}
+
 func checkRecipeQualityReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
 	if run.RecipeQualityReport == nil {
 		gate.RecipeQualityStatus = RecipeQualityNotRun
@@ -330,6 +432,29 @@ func gateIssueFromRecipeQualityIssue(issue RecipeQualityIssue) GateIssue {
 		Message:        issue.Message,
 		Remediation:    issue.Remediation,
 	}
+}
+
+func staleBudgetDealReport(run *FoodRunArtifact, gate *ReadinessGate) bool {
+	if run == nil || run.BudgetDealReport == nil {
+		return false
+	}
+	report := run.BudgetDealReport
+	if report.MealPlanFingerprint != "" && gate.MealPlanFingerprint != "" && report.MealPlanFingerprint != gate.MealPlanFingerprint {
+		return true
+	}
+	if report.ServingPlanFingerprint != "" && gate.ServingPlanFingerprint != "" && report.ServingPlanFingerprint != gate.ServingPlanFingerprint {
+		return true
+	}
+	if report.ScaledMealPlanFingerprint != "" && gate.ScaledMealPlanFingerprint != "" && report.ScaledMealPlanFingerprint != gate.ScaledMealPlanFingerprint {
+		return true
+	}
+	if report.PantryResolutionFingerprint != "" && gate.PantryResolutionFingerprint != "" && report.PantryResolutionFingerprint != gate.PantryResolutionFingerprint {
+		return true
+	}
+	if report.ShopRequirementsFingerprint != "" && gate.ShopRequirementsFingerprint != "" && report.ShopRequirementsFingerprint != gate.ShopRequirementsFingerprint {
+		return true
+	}
+	return report.ProductSelectionFingerprint != "" && gate.ProductSelectionFingerprint != "" && report.ProductSelectionFingerprint != gate.ProductSelectionFingerprint
 }
 
 func staleNutritionLedger(run *FoodRunArtifact, gate *ReadinessGate) bool {
@@ -892,6 +1017,12 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 			out = append(out, "# Recipe quality: "+gate.RecipeQualityStatus)
 			out = append(out, fmt.Sprintf("# Safe to use recipes: %t", gate.SafeToUseRecipes))
 		}
+		if gate.BudgetDealStatus != "" {
+			out = append(out, "# Budget/deal readiness: "+gate.BudgetDealStatus)
+			out = append(out, "# Budget status: "+firstNonEmptyString(gate.BudgetStatus, BudgetStatusNotSet))
+			out = append(out, fmt.Sprintf("# Safe to report budget: %t", gate.SafeToReportBudget))
+			out = append(out, fmt.Sprintf("# Safe to report deals: %t", gate.SafeToReportDeals))
+		}
 		if !gate.SafeToCook {
 			out = append(out, "# BASKET CAN BE BUILT, BUT MEAL PLAN IS NOT COOK-READY")
 			out = append(out, "# Do not rely on this basket alone for cooking.")
@@ -899,6 +1030,10 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 		if gate.Policy.RequireNutritionReady && !gate.SafeToReportNutrition {
 			out = append(out, "# BASKET CAN BE BUILT, BUT NUTRITION REPORTING IS NOT READY")
 			out = append(out, "# Do not treat calorie or macro numbers as reliable yet.")
+		}
+		if gate.Policy.RequireBudgetReady && !gate.SafeToReportBudget {
+			out = append(out, "# BASKET CAN BE BUILT, BUT BUDGET REPORTING IS NOT READY")
+			out = append(out, "# Do not present this basket as within budget yet.")
 		}
 		if len(gate.Warnings) > 0 {
 			out = append(out, "# Caveats:")
@@ -990,7 +1125,27 @@ func ReadinessBasketLinesWithRecipeSwapOptimizationPantryAndServing(lines []stri
 }
 
 func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingAndNutrition(lines []string, gate *ReadinessGate, swapPlan *RecipeSwapPlan, optimizationPlan *BasketOptimizationPlan, pantry *PantryResolution, serving *ServingPlan, scaled *ScaledMealPlan, nutrition *NutritionLedger) []string {
+	return ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionAndBudgetDeal(lines, gate, swapPlan, optimizationPlan, pantry, serving, scaled, nutrition, nil)
+}
+
+func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionAndBudgetDeal(lines []string, gate *ReadinessGate, swapPlan *RecipeSwapPlan, optimizationPlan *BasketOptimizationPlan, pantry *PantryResolution, serving *ServingPlan, scaled *ScaledMealPlan, nutrition *NutritionLedger, budgetDeal *BudgetDealReport) []string {
 	out := ReadinessBasketLinesWithRecipeSwapAndOptimization(lines, gate, swapPlan, optimizationPlan)
+	if gate != nil && budgetDeal != nil && budgetDeal.Status != BudgetDealNotRun {
+		budgetLines := budgetDealBasketLines(*budgetDeal)
+		if len(budgetLines) > 0 {
+			insertAt := 0
+			if gate.SafeToBuild {
+				insertAt = minInt(len(out), 6)
+			} else {
+				insertAt = minInt(len(out), 3)
+			}
+			next := make([]string, 0, len(out)+len(budgetLines))
+			next = append(next, out[:insertAt]...)
+			next = append(next, budgetLines...)
+			next = append(next, out[insertAt:]...)
+			out = next
+		}
+	}
 	if gate != nil && nutrition != nil && nutrition.Status != NutritionLedgerNotRun {
 		nutritionLines := nutritionBasketLines(*nutrition)
 		if len(nutritionLines) > 0 {
@@ -1041,6 +1196,41 @@ func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingAndNutrition(lin
 	next = append(next, pantryLines...)
 	next = append(next, out[insertAt:]...)
 	return next
+}
+
+func budgetDealBasketLines(report BudgetDealReport) []string {
+	lines := []string{
+		"# Budget/deal evidence: " + string(report.Status),
+		"# Budget status: " + firstNonEmptyString(report.BudgetStatus, BudgetStatusNotSet),
+	}
+	if report.Budget != nil {
+		lines = append(lines, "# Budget target: "+money.Format(report.Budget.Cents, report.Budget.Currency))
+	}
+	if report.EstimatedTotal.Cents > 0 {
+		lines = append(lines, "# Estimated total: "+money.Format(report.EstimatedTotal.Cents, report.EstimatedTotal.Currency))
+	}
+	if report.Summary.SelectedProductCount > 0 {
+		lines = append(lines, fmt.Sprintf("# Price coverage: %d/%d selected lines", report.Summary.SelectedProductsWithPrice, report.Summary.SelectedProductCount))
+	}
+	if report.ConsumedCostEstimate.Cents > 0 || report.PackageExcessCostEstimate.Cents > 0 {
+		lines = append(lines, "# Consumed-cost estimate: "+money.Format(report.ConsumedCostEstimate.Cents, report.ConsumedCostEstimate.Currency))
+		lines = append(lines, "# Package-excess estimate: "+money.Format(report.PackageExcessCostEstimate.Cents, report.PackageExcessCostEstimate.Currency))
+	}
+	if report.Delta != nil {
+		lines = append(lines, "# Budget delta: "+formatSignedCents(int(report.Delta.Cents)))
+	}
+	if report.Summary.OfferCount > 0 {
+		lines = append(lines, fmt.Sprintf("# Offers recognized: %d (%d applied, %d unclear, %d loyalty)", report.Summary.OfferCount, report.Summary.AppliedOfferCount, report.Summary.UnclearOfferCount, report.Summary.LoyaltyOfferCount))
+	}
+	if report.Summary.RecognizedDealSavingsCents > 0 {
+		lines = append(lines, "# Recognized offer savings: "+money.Format(int64(report.Summary.RecognizedDealSavingsCents), "EUR"))
+	}
+	for _, warning := range report.Warnings {
+		if warning.Message != "" {
+			lines = append(lines, "# Budget/deal caveat: "+warning.Message)
+		}
+	}
+	return lines
 }
 
 func nutritionBasketLines(ledger NutritionLedger) []string {
@@ -1171,7 +1361,7 @@ func formatSignedCents(cents int) string {
 }
 
 func ReadinessSummaryLine(gate ReadinessGate) string {
-	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), gate.ExitCode)
+	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\tbudget=%t\tbudget_status=%s\tdeals=%t\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), gate.SafeToReportBudget, firstNonEmptyString(gate.BudgetStatus, "-"), gate.SafeToReportDeals, gate.ExitCode)
 }
 
 func minInt(a, b int) int {
