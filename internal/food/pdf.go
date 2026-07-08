@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wachtermar/carrito/internal/money"
 	"github.com/wachtermar/carrito/internal/strutil"
 )
 
@@ -34,6 +35,12 @@ func WritePDFFromJSONFile(inputPath, outputPath string) error {
 	var title string
 	var lines []string
 	switch {
+	case probe["mealplan"] != nil && probe["shop"] != nil:
+		var artifact FoodRunArtifact
+		if err := json.Unmarshal(data, &artifact); err != nil {
+			return err
+		}
+		title, lines = pdfLinesForFoodRunArtifact(artifact)
 	case probe["selected_products"] != nil:
 		var shop ShopResult
 		if err := json.Unmarshal(data, &shop); err != nil {
@@ -62,7 +69,7 @@ func WritePDFFromJSONFile(inputPath, outputPath string) error {
 		}
 		title, lines = pdfLinesForRecipe(recipe)
 	default:
-		return fmt.Errorf("%s is not a supported food recipe, mealplan, or shop JSON file", inputPath)
+		return fmt.Errorf("%s is not a supported food recipe, mealplan, shop, or food-run JSON file", inputPath)
 	}
 	return writeSimplePDF(outputPath, title, lines, filepath.Dir(inputPath))
 }
@@ -171,6 +178,522 @@ func pdfLinesForMealPlan(plan MealPlan) (string, []string) {
 	return title, lines
 }
 
+func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
+	title := "Alcampo Meal Plan & Shopping List"
+	plan := artifact.MealPlan
+	shop := artifact.Shop
+	lines := []string{
+		"Summary:",
+		fmt.Sprintf("People: %d", plan.People),
+		fmt.Sprintf("Days: %d", len(plan.Days)),
+		"Selection policy: " + strutil.FirstNonEmpty(plan.SelectionPolicy, shop.Policy, "not set"),
+		"Budget: " + strutil.FirstNonEmpty(plan.BudgetEUR, "not set"),
+		"Shopping status: " + shoppingStatusLabel(shop),
+		"Estimated shopping total: " + formatPDFMoney(shop.EstimatedTotal.Amount, shop.EstimatedTotal.Currency),
+		"Data caveat: prices, offers, stock, substitutions, and variable-weight totals can change before Alcampo confirms an order.",
+		"Safety: no order was submitted; cart and checkout writes require explicit approval and a spending guard.",
+	}
+	if missing := missingShoppingIngredients(shop); len(missing) > 0 {
+		lines = append(lines, "Missing ingredients: "+strings.Join(missing, ", "))
+		lines = append(lines, "Estimated total excludes missing or unavailable items.")
+	}
+	if len(artifact.Meals) > 0 {
+		lines = append(lines, "Meals: "+strings.Join(artifact.Meals, ", "))
+	}
+	if plan.Nutrition != nil {
+		lines = append(lines, "Plan nutrition estimate: "+formatNutritionSummary(*plan.Nutrition))
+	}
+	if artifact.ReadinessGate != nil {
+		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
+	}
+	if artifact.NutritionLedger != nil {
+		lines = append(lines, nutritionLedgerPDFLines(*artifact.NutritionLedger)...)
+	}
+	if artifact.ServingPlan != nil {
+		lines = append(lines, servingPlanPDFLines(*artifact.ServingPlan, artifact.ScaledMealPlan)...)
+	}
+	if artifact.PantryResolution != nil {
+		lines = append(lines, pantryResolutionPDFLines(*artifact.PantryResolution)...)
+	}
+	if artifact.RecipeSwapPlan != nil {
+		lines = append(lines, recipeSwapPlanPDFLines(*artifact.RecipeSwapPlan)...)
+	}
+	if artifact.BasketOptimizationPlan != nil {
+		lines = append(lines, basketOptimizationPlanPDFLines(*artifact.BasketOptimizationPlan)...)
+	}
+	if artifact.QuantityLedger != nil {
+		lines = append(lines, ledgerTrustPDFLines(*artifact.QuantityLedger, artifact.BasketSafety)...)
+	}
+	if artifact.RecoveryPlan != nil {
+		lines = append(lines, recoveryPlanPDFLines(*artifact.RecoveryPlan)...)
+	}
+	lines = append(lines, nutritionCoveragePDFLines(shop)...)
+	lines = append(lines, "", "Day-by-day meal plan:")
+	swapsBySlot := recipeSwapsBySlot(artifact.RecipeSwapPlan)
+	for _, day := range plan.Days {
+		lines = append(lines, fmt.Sprintf("Day %d", day.Day))
+		for _, meal := range day.Meals {
+			lines = append(lines, formatMealType(meal.Type)+": "+meal.Recipe.Title)
+			if swap, ok := swapsBySlot[recipeSwapSlotKey(day.Day, meal.Type)]; ok && swap.ReplacementRecipeID == meal.Recipe.ID {
+				lines = append(lines, "Replaced original recipe: "+swap.OriginalRecipeTitle)
+			}
+			lines = append(lines, recipeSummaryLines(meal.Recipe)...)
+			if meal.PlanningReason != "" {
+				lines = append(lines, "Planning reason: "+meal.PlanningReason)
+			}
+		}
+		lines = append(lines, "")
+	}
+	lines = append(lines, pantryUsagePDFLines(plan)...)
+	lines = append(lines, requiredPurchasePDFLines(plan)...)
+	if artifact.QuantityLedger != nil {
+		lines = append(lines, ledgerAllocationPDFLines(*artifact.QuantityLedger)...)
+	}
+	lines = append(lines, shopResultPDFLines(shop)...)
+	lines = append(lines, "", "Basket safety:")
+	if artifact.BasketSafety != nil {
+		lines = append(lines, "- Status: "+strings.ToUpper(string(artifact.BasketSafety.Status)))
+		lines = append(lines, "- Safe to build basket: "+fmt.Sprintf("%t", artifact.BasketSafety.SafeToBuild))
+		if artifact.BasketSafety.Reason != "" {
+			lines = append(lines, "- "+artifact.BasketSafety.Reason)
+		}
+	}
+	lines = append(lines, "- No order was submitted.")
+	lines = append(lines, "- Cart and checkout writes require explicit approval and a spending guard.")
+	if len(artifact.Warnings) > 0 {
+		lines = append(lines, "", "Warnings and caveats:")
+		for _, warning := range artifact.Warnings {
+			lines = append(lines, "- "+warning)
+		}
+	}
+	return title, lines
+}
+
+func readinessGatePDFLines(gate ReadinessGate) []string {
+	lines := []string{
+		"",
+		"Basket readiness: " + strings.ToUpper(string(gate.Status)),
+		fmt.Sprintf("Safe to build: %t", gate.SafeToBuild),
+		"Cooking readiness: " + strings.ToUpper(strutil.FirstNonEmpty(gate.CookReadinessStatus, string(ReadinessReadyExact))),
+		fmt.Sprintf("Safe to cook: %t", gate.SafeToCook),
+	}
+	if gate.NutritionStatus != "" {
+		lines = append(lines, "Nutrition readiness: "+strings.ToUpper(gate.NutritionStatus), fmt.Sprintf("Safe to report nutrition: %t", gate.SafeToReportNutrition))
+	}
+	if !gate.SafeToBuild {
+		lines = append(lines, "Do not use this basket for shopping.")
+	}
+	if gate.ExitReason != "" {
+		lines = append(lines, "Readiness reason: "+gate.ExitReason)
+	}
+	if len(gate.BlockingIssues) > 0 {
+		lines = append(lines, "Shopping not ready:")
+		for _, issue := range gate.BlockingIssues {
+			lines = append(lines, "- "+issue.Message)
+			if issue.Remediation != "" {
+				lines = append(lines, "  Fix: "+issue.Remediation)
+			}
+		}
+	}
+	if len(gate.Warnings) > 0 {
+		lines = append(lines, "Readiness caveats:")
+		for _, issue := range gate.Warnings {
+			lines = append(lines, "- "+issue.Message)
+		}
+	}
+	return lines
+}
+
+func nutritionLedgerPDFLines(ledger NutritionLedger) []string {
+	if ledger.Status == NutritionLedgerNotRun {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Nutrition evidence:",
+		"- Status: " + strings.ToUpper(string(ledger.Status)),
+		fmt.Sprintf("- Known nutrition coverage: %d of %d ingredient lines", ledger.Coverage.LinesWithAnyNutrition, ledger.Coverage.IngredientLines),
+		fmt.Sprintf("- Alcampo label coverage: %d of %d ingredient lines", ledger.Coverage.LinesWithAlcampoLabel, ledger.Coverage.IngredientLines),
+		fmt.Sprintf("- Pantry nutrition coverage: %d pantry line(s); missing for %d pantry-covered line(s)", ledger.Coverage.LinesWithPantryNutrition, ledger.Coverage.PantryMissingLines),
+		"- Basis: consumed scaled recipe quantities",
+		"- Package excess is not counted as eaten by default.",
+	}
+	if ledger.Coverage.QuantityCoverageRatio != nil {
+		lines = append(lines, fmt.Sprintf("- Quantity coverage: %.0f%%", *ledger.Coverage.QuantityCoverageRatio*100))
+	}
+	if ledger.TotalConsumedKnown != nil {
+		lines = append(lines, "- Known consumed total: "+formatNutritionRollupFacts(*ledger.TotalConsumedKnown))
+	}
+	for _, meal := range ledger.MealSummaries {
+		if meal.PerCookedServingKnown == nil {
+			if len(meal.MissingIngredients) > 0 {
+				lines = append(lines, fmt.Sprintf("- Day %d %s: nutrition incomplete; missing %s", meal.Day, meal.MealSlot, strings.Join(meal.MissingIngredients, ", ")))
+			}
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- Day %d %s per cooked serving: %s", meal.Day, meal.MealSlot, formatNutritionRollupFacts(*meal.PerCookedServingKnown)))
+		if len(meal.MissingIngredients) > 0 {
+			lines = append(lines, "  Missing nutrition evidence: "+strings.Join(meal.MissingIngredients, ", "))
+		}
+	}
+	for _, declared := range ledger.RecipeDeclaredSummaries {
+		if declared.PerCookedServing == nil {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- Recipe-declared nutrition for Day %d %s: %s per serving", declared.Day, declared.MealSlot, formatNutritionRollupFacts(*declared.PerCookedServing)))
+	}
+	for _, issue := range ledger.BlockingIssues {
+		if issue.Message != "" {
+			lines = append(lines, "- Nutrition issue: "+issue.Message)
+		}
+	}
+	return lines
+}
+
+func formatNutritionRollupFacts(rollup NutritionRollup) string {
+	var parts []string
+	if rollup.Facts.EnergyKcal != nil {
+		parts = append(parts, fmt.Sprintf("%.3g kcal", rollup.Facts.EnergyKcal.Value))
+	}
+	if rollup.Facts.ProteinG != nil {
+		parts = append(parts, fmt.Sprintf("%.3g g protein", rollup.Facts.ProteinG.Value))
+	}
+	if rollup.Facts.CarbohydrateG != nil {
+		parts = append(parts, fmt.Sprintf("%.3g g carbs", rollup.Facts.CarbohydrateG.Value))
+	}
+	if rollup.Facts.FatG != nil {
+		parts = append(parts, fmt.Sprintf("%.3g g fat", rollup.Facts.FatG.Value))
+	}
+	if rollup.Facts.SaltG != nil {
+		parts = append(parts, fmt.Sprintf("%.3g g salt", rollup.Facts.SaltG.Value))
+	}
+	if len(parts) == 0 {
+		return "known nutrients unavailable"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func servingPlanPDFLines(plan ServingPlan, scaled *ScaledMealPlan) []string {
+	if plan.Status == ServingPlanNotUsed {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Servings and scaling:",
+		"- Serving status: " + strings.ToUpper(string(plan.Status)),
+		fmt.Sprintf("- Meal slots: %d", plan.Summary.TotalMealSlots),
+		fmt.Sprintf("- Target serving units: %.3g", plan.Summary.TotalTargetServingUnits),
+		fmt.Sprintf("- Cooked serving units: %.3g", plan.Summary.TotalCookedServingUnits),
+	}
+	if plan.Summary.SlotsWithLeftovers > 0 {
+		lines = append(lines, fmt.Sprintf("- Slots with planned leftovers: %d", plan.Summary.SlotsWithLeftovers))
+	}
+	for _, slot := range plan.Slots {
+		lines = append(lines, fmt.Sprintf("- Day %d %s: %s, %.3g servings cooked, scale %.3g", slot.Day, slot.MealSlot, slot.RecipeTitle, slot.CookedServingUnits, slot.ScaleFactor))
+		if len(slot.Participants) > 0 {
+			var parts []string
+			for _, participant := range slot.Participants {
+				label := strutil.FirstNonEmpty(participant.MemberID, participant.PortionType, "serving")
+				parts = append(parts, fmt.Sprintf("%s %.3g", label, participant.ServingFactor))
+			}
+			lines = append(lines, "  Participants: "+strings.Join(parts, ", "))
+		}
+	}
+	if scaled != nil {
+		for _, slot := range scaled.Slots {
+			for _, ingredient := range slot.Ingredients {
+				if ingredient.ShoppingQuantity == nil {
+					continue
+				}
+				if ingredient.RoundingApplied {
+					lines = append(lines, fmt.Sprintf("  %s: cook about %s; buy %s", ingredient.IngredientName, formatPantryQuantity(ingredient.CookingQuantity), formatPantryQuantity(ingredient.ShoppingQuantity)))
+				}
+			}
+		}
+	}
+	return lines
+}
+
+func pantryResolutionPDFLines(resolution PantryResolution) []string {
+	if resolution.Status == PantryResolutionNotUsed {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Pantry and shopping delta:",
+		"- Pantry status: " + strings.ToUpper(string(resolution.Status)),
+		fmt.Sprintf("- Shopping ingredients: %d", resolution.Summary.ShopIngredientLines),
+		fmt.Sprintf("- Pantry-covered ingredients: %d", resolution.Summary.PantryCoveredIngredientLines),
+	}
+	var covered []string
+	var partial []string
+	var blocked []string
+	for _, line := range resolution.Lines {
+		switch line.PantryDecision {
+		case PantryDecisionPantryFullAssumed:
+			covered = append(covered, fmt.Sprintf("- %s: assumed pantry staple", line.IngredientName))
+		case PantryDecisionPantryFullConfirmed:
+			covered = append(covered, fmt.Sprintf("- %s: confirmed pantry item, %s allocated", line.IngredientName, formatPantryQuantity(line.PantryAllocated)))
+		case PantryDecisionPantryPartialConfirmed:
+			partial = append(partial, fmt.Sprintf("- %s: %s from pantry, %s still needed from Alcampo", line.IngredientName, formatPantryQuantity(line.PantryAllocated), formatPantryQuantity(line.ShopRequired)))
+		case PantryDecisionBlockedUnconfirmed, PantryDecisionBlockedAmbiguousUnit, PantryDecisionBlockedExpired:
+			blocked = append(blocked, fmt.Sprintf("- %s: %s", line.IngredientName, line.Reason))
+		}
+	}
+	if len(covered) > 0 {
+		lines = append(lines, "Not included in basket because covered by pantry:")
+		lines = append(lines, covered...)
+	}
+	if len(partial) > 0 {
+		lines = append(lines, "Partially covered by pantry:")
+		lines = append(lines, partial...)
+	}
+	if len(blocked) > 0 {
+		lines = append(lines, "Cooking readiness blockers:")
+		lines = append(lines, blocked...)
+		lines = append(lines, "Do not rely on this plan for cooking until pantry issues are resolved.")
+	}
+	if len(resolution.Warnings) > 0 {
+		lines = append(lines, "Pantry caveats:")
+		for _, warning := range resolution.Warnings {
+			lines = append(lines, "- "+warning.Message)
+		}
+	}
+	lines = append(lines, "Nutrition caveat: Alcampo label nutrition covers purchased products only; pantry-covered ingredients may not have label nutrition.")
+	return lines
+}
+
+func recipeSwapPlanPDFLines(plan RecipeSwapPlan) []string {
+	lines := []string{"", "Meal plan repair:"}
+	switch plan.Status {
+	case RecipeSwapNotNeeded:
+		lines = append(lines, "- Not needed; the basket was already ready or recoverable without recipe swaps.")
+	case RecipeSwapDisabled:
+		lines = append(lines, "- Disabled.")
+	case RecipeSwapAttemptedApplied:
+		lines = append(lines, fmt.Sprintf("- Applied swaps: %d", len(plan.AppliedSwaps)))
+		for _, swap := range plan.AppliedSwaps {
+			lines = append(lines, fmt.Sprintf("- Day %d %s: %s -> %s", swap.Day, formatMealType(swap.MealSlot), swap.OriginalRecipeTitle, swap.ReplacementRecipeTitle))
+			if swap.Reason != "" {
+				lines = append(lines, "  Reason: "+swap.Reason)
+			}
+			lines = append(lines, "  Validation: replacement recipe passed the final readiness gate.")
+		}
+	case RecipeSwapAttemptedFailed:
+		lines = append(lines, "- Attempted, no fully valid replacement was found.")
+		if len(plan.RemainingIssues) > 0 {
+			lines = append(lines, "- Remaining repair blockers:")
+			for _, issue := range plan.RemainingIssues {
+				lines = append(lines, "  - "+issue.Message)
+			}
+		}
+	default:
+		lines = append(lines, "- Status: "+string(plan.Status))
+	}
+	if plan.FinalReadinessStatus != "" {
+		lines = append(lines, "- Final readiness after repair: "+strings.ToUpper(plan.FinalReadinessStatus))
+	}
+	return lines
+}
+
+func basketOptimizationPlanPDFLines(plan BasketOptimizationPlan) []string {
+	lines := []string{
+		"",
+		"Basket optimization:",
+		"- Status: " + strings.ToUpper(string(plan.Status)),
+		"- Objective: " + strings.ReplaceAll(strutil.FirstNonEmpty(plan.Policy.Objective, BasketObjectiveSafeBalanced), "_", "-"),
+	}
+	if plan.Validation.FinalReadinessStatus != "" {
+		lines = append(lines, "- Final readiness after optimization: "+strings.ToUpper(plan.Validation.FinalReadinessStatus))
+	}
+	if plan.OptimizedSummary != nil {
+		if plan.BaselineSummary.EffectiveSubtotalCents > 0 {
+			delta := plan.OptimizedSummary.EffectiveSubtotalCents - plan.BaselineSummary.EffectiveSubtotalCents
+			lines = append(lines, "- Estimated subtotal delta: "+formatOptimizationCents(delta))
+		}
+		if plan.OptimizedSummary.OfferSavingsCents > 0 {
+			lines = append(lines, "- Applied offer savings: "+money.FormatAmount(int64(plan.OptimizedSummary.OfferSavingsCents)))
+		}
+	}
+	changed := 0
+	for _, decision := range plan.Decisions {
+		if !decision.Changed {
+			continue
+		}
+		changed++
+		lines = append(lines, fmt.Sprintf("- %s: %s -> %s", decision.IngredientName, strutil.FirstNonEmpty(decision.BaselineProductName, "baseline product"), strutil.FirstNonEmpty(decision.SelectedProductName, "optimized product")))
+		if decision.CostDeltaCents != 0 {
+			lines = append(lines, "  Cost delta: "+formatOptimizationCents(decision.CostDeltaCents))
+		}
+		if decision.OfferSavingsCents > 0 {
+			lines = append(lines, "  Offer savings: "+money.FormatAmount(int64(decision.OfferSavingsCents)))
+		}
+		if decision.Reason != "" {
+			lines = append(lines, "  Reason: "+decision.Reason)
+		}
+	}
+	if changed == 0 {
+		lines = append(lines, "- No product switch was applied.")
+	}
+	for _, warning := range plan.Warnings {
+		if warning.Message != "" {
+			lines = append(lines, "- Caveat: "+warning.Message)
+		}
+	}
+	return lines
+}
+
+func formatOptimizationCents(cents int) string {
+	sign := "+"
+	if cents < 0 {
+		sign = "-"
+		cents = -cents
+	}
+	return sign + money.FormatAmount(int64(cents))
+}
+
+func recipeSwapsBySlot(plan *RecipeSwapPlan) map[string]AppliedRecipeSwap {
+	out := map[string]AppliedRecipeSwap{}
+	if plan == nil {
+		return out
+	}
+	for _, swap := range plan.AppliedSwaps {
+		out[recipeSwapSlotKey(swap.Day, swap.MealSlot)] = swap
+	}
+	return out
+}
+
+func recipeSwapSlotKey(day int, mealSlot string) string {
+	return fmt.Sprintf("%d|%s", day, normalizeKey(mealSlot))
+}
+
+func ledgerTrustPDFLines(ledger QuantityLedger, safety *BasketSafety) []string {
+	lines := []string{
+		"",
+		"Shopping confidence:",
+		"Ledger status: " + strings.ToUpper(string(ledger.Status)),
+		fmt.Sprintf("Ingredient coverage: %d / %d", ledger.Summary.CoveredIngredientCount, ledger.Summary.IngredientCount),
+		fmt.Sprintf("Exact quantity lines: %d", ledger.Summary.ExactQuantityLines),
+		fmt.Sprintf("Estimated variable-weight lines: %d", ledger.Summary.EstimatedVariableWeightLines),
+		fmt.Sprintf("Needs-review lines: %d", ledger.Summary.NeedsReviewLines),
+		fmt.Sprintf("Missing lines: %d", ledger.Summary.MissingLines),
+	}
+	if safety != nil {
+		lines = append(lines, "Basket safety: "+strings.ToUpper(string(safety.Status)))
+		if safety.Reason != "" {
+			lines = append(lines, "Basket safety reason: "+safety.Reason)
+		}
+	}
+	if ledger.Nutrition != nil {
+		lines = append(lines, fmt.Sprintf("Nutrition label coverage: %.0f%%", ledger.Nutrition.Coverage.CalorieCoverageRatio*100))
+	}
+	if ledger.Totals.EstimatedTotal.Expected.Amount != "" {
+		label := "Estimated total: "
+		if !ledger.Totals.EstimatedTotal.IsExact {
+			label = "Estimated total/range: "
+		}
+		lines = append(lines, label+formatPDFMoney(ledger.Totals.EstimatedTotal.Expected.Amount, ledger.Totals.EstimatedTotal.Expected.Currency))
+	}
+	for _, warning := range ledger.Warnings {
+		if warning.Message != "" {
+			lines = append(lines, "Ledger warning: "+warning.Message)
+		}
+	}
+	return lines
+}
+
+func ledgerAllocationPDFLines(ledger QuantityLedger) []string {
+	if len(ledger.Allocations) == 0 {
+		return nil
+	}
+	requirements := make(map[string]IngredientRequirement, len(ledger.Requirements))
+	for _, req := range ledger.Requirements {
+		requirements[req.RequirementID] = req
+	}
+	lines := []string{"Quantity ledger:"}
+	for _, allocation := range ledger.Allocations {
+		req := requirements[allocation.RequirementID]
+		name := strutil.FirstNonEmpty(req.IngredientName, allocation.RequirementID)
+		badges := strings.Join(allocation.Badges, ", ")
+		if badges != "" {
+			badges = " [" + badges + "]"
+		}
+		if allocation.MatchType == "missing" {
+			lines = append(lines, fmt.Sprintf("- %s: MISSING%s", name, badges))
+		} else {
+			lines = append(lines, fmt.Sprintf("- %s -> %s%s", name, strutil.FirstNonEmpty(allocation.ProductName, allocation.SKU, "selected product"), badges))
+		}
+		if allocation.RequiredQuantity != nil {
+			lines = append(lines, "  Required: "+formatNormalizedQuantity(*allocation.RequiredQuantity))
+		}
+		if allocation.PackageCount > 0 {
+			lines = append(lines, fmt.Sprintf("  Buy: %d package(s)", allocation.PackageCount))
+		}
+		if allocation.PurchasedQuantity != nil {
+			lines = append(lines, "  Purchased coverage: "+formatQuantityRange(*allocation.PurchasedQuantity))
+		}
+		if allocation.ExcessQuantity != nil && allocation.ExcessQuantity.BaseValue > 0 {
+			lines = append(lines, "  Excess: "+formatNormalizedQuantity(*allocation.ExcessQuantity))
+		}
+		if allocation.MissingQuantity != nil {
+			lines = append(lines, "  Missing: "+formatNormalizedQuantity(*allocation.MissingQuantity))
+		}
+		lines = append(lines, fmt.Sprintf("  Confidence: match %.0f%%, quantity %.0f%%", allocation.MatchConfidence*100, allocation.QuantityConfidence*100))
+		for _, warning := range allocation.Warnings {
+			if warning.Message != "" {
+				lines = append(lines, "  Warning: "+warning.Message)
+			}
+		}
+	}
+	lines = append(lines, "")
+	return lines
+}
+
+func recoveryPlanPDFLines(plan RecoveryPlan) []string {
+	lines := []string{
+		"",
+		"Recovery actions:",
+		"Recovery status: " + strings.ToUpper(string(plan.Status)),
+	}
+	if plan.StartedFromStatus != "" || plan.FinalLedgerStatus != "" {
+		lines = append(lines, "Ledger recovery: "+strutil.FirstNonEmpty(plan.StartedFromStatus, "unknown")+" -> "+strutil.FirstNonEmpty(plan.FinalLedgerStatus, "unknown"))
+	}
+	if len(plan.AppliedDecisions) == 0 {
+		if len(plan.RemainingIssues) > 0 {
+			lines = append(lines, "No safe recovery was applied; remaining issues require review.")
+		} else if len(plan.Issues) == 0 {
+			lines = append(lines, "No recovery was needed.")
+		}
+		return lines
+	}
+	for _, decision := range plan.AppliedDecisions {
+		lines = append(lines, fmt.Sprintf("- %s: %s", decision.OriginalIngredient, decision.DecisionType))
+		if decision.FinalProductID != "" {
+			lines = append(lines, "  Final product: "+decision.FinalProductID)
+		}
+		if decision.Reason != "" {
+			lines = append(lines, "  Reason: "+decision.Reason)
+		}
+		if decision.Confidence != "" {
+			lines = append(lines, "  Confidence: "+decision.Confidence)
+		}
+		for _, change := range decision.RecipeChanges {
+			label := "Recipe change"
+			if change.ChangeType != "" {
+				label += " (" + change.ChangeType + ")"
+			}
+			lines = append(lines, "  "+label+": "+change.NewText)
+		}
+	}
+	if len(plan.RemainingIssues) > 0 {
+		lines = append(lines, "Remaining recovery issues:")
+		for _, issue := range plan.RemainingIssues {
+			lines = append(lines, "- "+issue.IngredientName+": "+issue.BlockingReason)
+		}
+	}
+	return lines
+}
+
 func pdfLinesForRecipe(recipe Recipe) (string, []string) {
 	return recipe.Title, recipeSummaryLines(recipe)
 }
@@ -197,30 +720,136 @@ func pdfLinesForRecipes(mealPlanID string, recipes []Recipe) (string, []string) 
 func pdfLinesForShop(shop ShopResult) (string, []string) {
 	lines := []string{
 		"Selection policy: " + shop.Policy,
-		"Estimated total: " + shop.EstimatedTotal.Amount + " " + strutil.FirstNonEmpty(shop.EstimatedTotal.Currency, "EUR"),
+		"Estimated total: " + formatPDFMoney(shop.EstimatedTotal.Amount, shop.EstimatedTotal.Currency),
 	}
 	if shop.Nutrition != nil {
 		lines = append(lines, "Nutrition: "+formatNutritionSummary(*shop.Nutrition))
 	}
-	lines = append(lines, "", "Selected products:")
+	lines = append(lines, shopResultPDFLines(shop)...)
+	return "Carrito Plan", lines
+}
+
+func shopResultPDFLines(shop ShopResult) []string {
+	lines := []string{"", "Selected products:"}
 	for _, selected := range shop.SelectedProducts {
 		if selected.Error != "" {
 			lines = append(lines, fmt.Sprintf("- %s: ERROR %s", selected.Ingredient.Name, selected.Error))
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("- %s -> %s (%s)", selected.Ingredient.Name, selected.Product.Name, selected.Product.Price.Amount))
+		lines = append(lines, fmt.Sprintf("- %s -> %s (%s)", selected.Ingredient.Name, selected.Product.Name, formatPDFMoney(selected.Product.Price.Amount, selected.Product.Price.Currency)))
+		if selected.PurchaseQuantity != "" {
+			lines = append(lines, "  Buy: "+selected.PurchaseQuantity+" package(s)")
+		}
+		if selected.LineTotal.Amount != "" {
+			lines = append(lines, "  Line total: "+formatPDFMoney(selected.LineTotal.Amount, selected.LineTotal.Currency))
+		}
+		if selected.QuantityReason != "" {
+			lines = append(lines, "  Package math: "+selected.QuantityReason)
+		}
 		if selected.Product.ImageURL != "" {
 			lines = append(lines, "  Product image: "+selected.Product.ImageURL)
+		}
+		for _, offer := range selected.Product.Offers {
+			lines = append(lines, "  Offer: "+offer)
+		}
+		if selected.ProductNutrition != nil {
+			lines = append(lines, "  Nutrition: "+formatNutritionBasis(*selected.ProductNutrition))
+			lines = append(lines, formatStructuredNutritionPDFLines("  Label", *selected.ProductNutrition)...)
+		}
+		if selected.RequiredNutrition != nil {
+			lines = append(lines, "  Required nutrition estimate: "+formatNutritionEstimate(*selected.RequiredNutrition))
 		}
 		if selected.SelectionReason != "" {
 			lines = append(lines, "  Reason: "+selected.SelectionReason)
 		}
+		for _, warning := range selected.Warnings {
+			lines = append(lines, "  Warning: "+warning)
+		}
+		for _, warning := range selected.NutritionWarnings {
+			lines = append(lines, "  Nutrition warning: "+warning)
+		}
 	}
+	lines = append(lines, "Estimated total: "+formatPDFMoney(shop.EstimatedTotal.Amount, shop.EstimatedTotal.Currency))
 	if len(shop.BasketLines) > 0 {
 		lines = append(lines, "", "Basket lines:")
 		lines = append(lines, shop.BasketLines...)
 	}
-	return "Carrito Plan", lines
+	return lines
+}
+
+func shoppingStatusLabel(shop ShopResult) string {
+	if shop.Complete {
+		return "complete"
+	}
+	return "incomplete"
+}
+
+func missingShoppingIngredients(shop ShopResult) []string {
+	var missing []string
+	for _, selected := range shop.SelectedProducts {
+		if selected.Error != "" {
+			missing = append(missing, selected.Ingredient.Name)
+		}
+	}
+	return missing
+}
+
+func nutritionCoveragePDFLines(shop ShopResult) []string {
+	if len(shop.SelectedProducts) == 0 {
+		return nil
+	}
+	total := 0
+	covered := 0
+	var missing []string
+	for _, selected := range shop.SelectedProducts {
+		if selected.Error != "" {
+			continue
+		}
+		total++
+		if selected.RequiredNutrition != nil {
+			covered++
+			continue
+		}
+		missing = append(missing, selected.Ingredient.Name)
+	}
+	if total == 0 {
+		return nil
+	}
+	lines := []string{fmt.Sprintf("Selected-product nutrition coverage: %d of %d ingredients with safe label-based estimates.", covered, total)}
+	if len(missing) > 0 {
+		lines = append(lines, "Nutrition missing or unsafe for: "+strings.Join(missing, ", "))
+	}
+	if len(shop.NutritionWarnings) > 0 {
+		lines = append(lines, "Nutrition warnings:")
+		for _, warning := range shop.NutritionWarnings {
+			lines = append(lines, "- "+warning)
+		}
+	}
+	return lines
+}
+
+func pantryUsagePDFLines(plan MealPlan) []string {
+	if len(plan.PantryUsage) == 0 {
+		return nil
+	}
+	lines := []string{"Pantry and fridge used:"}
+	for _, use := range plan.PantryUsage {
+		lines = append(lines, fmt.Sprintf("- %s: %.3g %s from %s", use.Ingredient, use.Quantity, use.Unit, use.PantryItem))
+	}
+	lines = append(lines, "")
+	return lines
+}
+
+func requiredPurchasePDFLines(plan MealPlan) []string {
+	if len(plan.RequiredPurchases) == 0 {
+		return nil
+	}
+	lines := []string{"Ingredients to buy:"}
+	for _, item := range plan.RequiredPurchases {
+		lines = append(lines, fmt.Sprintf("- %s: %.3g %s", item.Name, item.Quantity, item.Unit))
+	}
+	lines = append(lines, "")
+	return lines
 }
 
 func recipeSummaryLines(recipe Recipe) []string {
@@ -244,7 +873,7 @@ func recipeSummaryLines(recipe Recipe) []string {
 	if len(recipe.Equipment) > 0 {
 		lines = append(lines, "Equipment: "+strings.Join(recipe.Equipment, ", "))
 	}
-	lines = append(lines, "Steps:")
+	lines = append(lines, "Cooking instructions:")
 	for _, step := range recipe.Steps {
 		lines = append(lines, fmt.Sprintf("%d. %s", step.Number, step.Text))
 		if step.ImageURL != "" {
@@ -262,6 +891,99 @@ func recipeSummaryLines(recipe Recipe) []string {
 
 func formatNutritionSummary(summary NutritionSummary) string {
 	return fmt.Sprintf("%.0f kcal, %.1fg protein, %.1fg carbs, %.1fg fat", summary.Kcal, summary.ProteinG, summary.CarbsG, summary.FatG)
+}
+
+func formatPDFMoney(amount, currency string) string {
+	if amount == "" {
+		return "unknown"
+	}
+	return amount + " " + strutil.FirstNonEmpty(currency, "EUR")
+}
+
+func formatNutritionBasis(n StructuredNutrition) string {
+	switch n.Basis {
+	case NutritionPer100g:
+		return "Alcampo label, per 100 g"
+	case NutritionPer100ml:
+		return "Alcampo label, per 100 ml"
+	case NutritionPerServing:
+		return "Alcampo label, per serving"
+	case NutritionPerUnit:
+		return "Alcampo label, per unit"
+	default:
+		return "Alcampo label, basis unknown"
+	}
+}
+
+func formatStructuredNutritionPDFLines(prefix string, n StructuredNutrition) []string {
+	var lines []string
+	if n.Kcal != nil {
+		lines = append(lines, fmt.Sprintf("%s energy: %.0f kcal", prefix, *n.Kcal))
+	}
+	if n.ProteinG != nil {
+		lines = append(lines, fmt.Sprintf("%s protein: %.1f g", prefix, *n.ProteinG))
+	}
+	if n.CarbsG != nil {
+		lines = append(lines, fmt.Sprintf("%s carbs: %.1f g", prefix, *n.CarbsG))
+	}
+	if n.FatG != nil {
+		lines = append(lines, fmt.Sprintf("%s fat: %.1f g", prefix, *n.FatG))
+	}
+	if n.SaltG != nil {
+		lines = append(lines, fmt.Sprintf("%s salt: %.3g g", prefix, *n.SaltG))
+	}
+	return lines
+}
+
+func formatNutritionEstimate(estimate NutritionEstimate) string {
+	n := estimate.Nutrients
+	var parts []string
+	if n.Kcal != nil {
+		parts = append(parts, fmt.Sprintf("%.0f kcal", *n.Kcal))
+	}
+	if n.ProteinG != nil {
+		parts = append(parts, fmt.Sprintf("%.1fg protein", *n.ProteinG))
+	}
+	if n.CarbsG != nil {
+		parts = append(parts, fmt.Sprintf("%.1fg carbs", *n.CarbsG))
+	}
+	if n.FatG != nil {
+		parts = append(parts, fmt.Sprintf("%.1fg fat", *n.FatG))
+	}
+	if len(parts) == 0 {
+		return "available"
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatNormalizedQuantity(q NormalizedQuantity) string {
+	if q.Unit == "" {
+		return fmt.Sprintf("%.3g", q.Value)
+	}
+	if q.BaseUnit != "" && q.BaseUnit != q.Unit {
+		return fmt.Sprintf("%.3g %s (%.3g %s)", q.Value, q.Unit, q.BaseValue, q.BaseUnit)
+	}
+	return fmt.Sprintf("%.3g %s", q.Value, q.Unit)
+}
+
+func formatQuantityRange(q QuantityRange) string {
+	label := formatNormalizedQuantity(q.Expected)
+	if !q.IsExact {
+		label += " estimated"
+	}
+	if q.Reason != "" {
+		label += " (" + q.Reason + ")"
+	}
+	return label
+}
+
+func formatMealType(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "Meal"
+	}
+	value = strings.ToLower(value)
+	return strings.ToUpper(value[:1]) + value[1:]
 }
 
 type pdfElement struct {

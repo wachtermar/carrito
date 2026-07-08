@@ -46,6 +46,10 @@ func ShopMealPlan(ctx context.Context, client *alcampo.Client, plan MealPlan, pr
 		if selection.Error != "" {
 			result.Complete = false
 		}
+		if report := ProductNutritionReportFromSelection(selection); report != nil {
+			result.ProductNutritionReports = append(result.ProductNutritionReports, *report)
+			result.NutritionWarnings = append(result.NutritionWarnings, report.Warnings...)
+		}
 		if selection.Product.SKU != "" {
 			result.BasketLines = append(result.BasketLines, BasketLineForSelection(selection))
 			result.EstimatedTotal.Cents += selection.LineTotal.Cents
@@ -152,6 +156,7 @@ func SelectProduct(ingredient Ingredient, products []alcampo.Product, profile Pr
 	selection.LineTotal = lineTotal
 	selection.QuantityReason = quantityReason
 	selection.Warnings = append(selection.Warnings, warnings...)
+	AttachSelectedProductNutrition(&selection)
 	return selection
 }
 

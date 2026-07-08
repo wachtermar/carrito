@@ -572,6 +572,268 @@ func TestWritePDFFromJSONFileEmbedsRelativeImage(t *testing.T) {
 	}
 }
 
+func TestWritePDFFromJSONFileFoodRunArtifactIncludesMealPlanAndShop(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPNG(t, filepath.Join(dir, "cover.png"))
+	writeTestPNG(t, filepath.Join(dir, "product.png"))
+	labelNutrition := &StructuredNutrition{
+		Basis:     NutritionPer100g,
+		BasisQty:  100,
+		BasisUnit: "g",
+		Source:    "alcampo_label",
+		Kcal:      floatPtr(350),
+		ProteinG:  floatPtr(7),
+	}
+	requiredNutrition := &NutritionEstimate{
+		RequiredQuantity: 180,
+		RequiredUnit:     "g",
+		Factor:           1.8,
+		Nutrients:        StructuredNutrition{Basis: NutritionPer100g, Kcal: floatPtr(630), ProteinG: floatPtr(12.6)},
+		Source:           "alcampo_label",
+		Confidence:       0.85,
+	}
+	artifact := FoodRunArtifact{
+		SchemaVersion: 1,
+		Kind:          "food_run",
+		MealPlan: MealPlan{
+			ID:              "plan-full",
+			People:          2,
+			BudgetEUR:       "30",
+			SelectionPolicy: PolicyBalanced,
+			Days: []DayPlan{{
+				Day: 1,
+				Meals: []Meal{{
+					Type: "dinner",
+					Recipe: Recipe{
+						ID:          "test-dinner",
+						Title:       "Test Dinner",
+						Servings:    2,
+						ImageURL:    "cover.png",
+						Ingredients: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
+						Steps: []RecipeStep{
+							{Number: 1, Text: "Cook the rice."},
+							{Number: 2, Text: "Serve hot."},
+						},
+						NutritionPerServing: &NutritionSummary{Kcal: 400, ProteinG: 12, CarbsG: 70, FatG: 8},
+					},
+				}},
+			}},
+			RequiredPurchases: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
+			Nutrition:         &NutritionSummary{Kcal: 800, ProteinG: 24, CarbsG: 140, FatG: 16},
+		},
+		Shop: ShopResult{
+			MealPlanID: "plan-full",
+			Policy:     PolicyBalanced,
+			SelectedProducts: []SelectedProduct{{
+				Ingredient:        Ingredient{Name: "rice", Quantity: 180, Unit: "g"},
+				Product:           ProductSummary{SKU: "rice-sku", Name: "Arroz redondo", Price: money.Money{Amount: "1.50", Currency: "EUR", Cents: 150}, ImageURL: "product.png", Offers: []string{"Producto en Folleto"}},
+				PurchaseQuantity:  "1",
+				PackageCount:      1,
+				LineTotal:         money.Money{Amount: "1.50", Currency: "EUR", Cents: 150},
+				QuantityReason:    "calculated 1 package(s): 180 g required, 500 g per package",
+				SelectionReason:   "balanced value policy",
+				ProductNutrition:  labelNutrition,
+				RequiredNutrition: requiredNutrition,
+			}},
+			ProductNutritionReports: []ProductNutritionReport{{
+				SKU:               "rice-sku",
+				ProductName:       "Arroz redondo",
+				LabelNutrition:    labelNutrition,
+				RequiredNutrition: requiredNutrition,
+			}},
+			BasketLines:    []string{"rice-sku 1 # rice"},
+			EstimatedTotal: money.Money{Amount: "1.50", Currency: "EUR", Cents: 150},
+			Complete:       true,
+		},
+		Meals:    []string{"dinner"},
+		Warnings: []string{"No order was submitted; cart and checkout writes still require explicit approval and a spending guard."},
+	}
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "run.json")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "run.pdf")
+	if err := WritePDFFromJSONFile(input, output); err != nil {
+		t.Fatal(err)
+	}
+	pdfData, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Day 1",
+		"Dinner: Test Dinner",
+		"Ingredients:",
+		"Cooking instructions:",
+		"1. Cook the rice.",
+		"Selected products:",
+		"Selected-product nutrition coverage: 1 of 1 ingredients",
+		"Nutrition: Alcampo label, per 100 g",
+		"Required nutrition estimate: 630 kcal, 12.6g protein",
+		"Arroz redondo",
+		"Estimated total: 1.50 EUR",
+		"Safety: no order was submitted",
+		"Product image",
+	} {
+		if !bytes.Contains(pdfData, []byte(want)) {
+			t.Fatalf("PDF missing %q\n%s", want, string(pdfData))
+		}
+	}
+	if !bytes.Contains(pdfData, []byte("/Subtype /Image")) {
+		t.Fatalf("PDF did not embed run artifact images")
+	}
+}
+
+func TestFoodRunArtifactRendererMakesIncompleteShoppingLoud(t *testing.T) {
+	artifact := FoodRunArtifact{
+		Kind: "food_run",
+		MealPlan: MealPlan{
+			People:          2,
+			SelectionPolicy: PolicyBalanced,
+			Days: []DayPlan{{
+				Day: 1,
+				Meals: []Meal{{
+					Type: "dinner",
+					Recipe: Recipe{
+						ID:          "test-recipe",
+						Title:       "Test Recipe",
+						Servings:    2,
+						Ingredients: []Ingredient{{Name: "beef strips", Quantity: 300, Unit: "g"}},
+						Steps:       []RecipeStep{{Number: 1, Text: "Cook."}},
+					},
+				}},
+			}},
+			RequiredPurchases: []Ingredient{{Name: "beef strips", Quantity: 300, Unit: "g"}},
+		},
+		Shop: ShopResult{
+			Policy:   PolicyBalanced,
+			Complete: false,
+			SelectedProducts: []SelectedProduct{{
+				Ingredient: Ingredient{Name: "beef strips", Quantity: 300, Unit: "g"},
+				Error:      "no products found",
+			}},
+		},
+		BasketPath: "basket.txt",
+	}
+	_, lines := pdfLinesForFoodRunArtifact(artifact)
+	text := strings.Join(lines, "\n")
+	for _, want := range []string{
+		"Shopping status: incomplete",
+		"Missing ingredients: beef strips",
+		"Estimated total excludes missing or unavailable items.",
+		"- beef strips: ERROR no products found",
+		"Basket safety:",
+		"- No order was submitted.",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("renderer missing %q\n%s", want, text)
+		}
+	}
+	assertSectionOrder(t, lines, "Summary:", "Day-by-day meal plan:", "Ingredients to buy:", "Selected products:", "Basket safety:")
+}
+
+func TestWritePDFFromJSONFileDispatchesPlanShopRunAndRejectsUnknown(t *testing.T) {
+	dir := t.TempDir()
+	plan := MealPlan{
+		ID:     "plan-only",
+		People: 2,
+		Days: []DayPlan{{
+			Day: 1,
+			Meals: []Meal{{
+				Type:   "dinner",
+				Recipe: Recipe{ID: "r", Title: "Dinner", Servings: 2, Ingredients: []Ingredient{{Name: "rice"}}, Steps: []RecipeStep{{Number: 1, Text: "Cook."}}},
+			}},
+		}},
+	}
+	shop := ShopResult{
+		Policy:           PolicyBalanced,
+		SelectedProducts: []SelectedProduct{{Ingredient: Ingredient{Name: "rice"}, Product: ProductSummary{Name: "Rice"}}},
+		Complete:         true,
+	}
+	run := FoodRunArtifact{Kind: "food_run", MealPlan: plan, Shop: shop}
+	for name, value := range map[string]any{
+		"plan": plan,
+		"shop": shop,
+		"run":  run,
+	} {
+		input := filepath.Join(dir, name+".json")
+		data, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(input, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := WritePDFFromJSONFile(input, filepath.Join(dir, name+".pdf")); err != nil {
+			t.Fatalf("%s dispatch failed: %v", name, err)
+		}
+	}
+	unknown := filepath.Join(dir, "unknown.json")
+	if err := os.WriteFile(unknown, []byte(`{"foo":"bar"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := WritePDFFromJSONFile(unknown, filepath.Join(dir, "unknown.pdf"))
+	if err == nil || !strings.Contains(err.Error(), "not a supported food recipe, mealplan, shop, or food-run JSON file") {
+		t.Fatalf("unexpected unknown JSON error: %v", err)
+	}
+}
+
+func TestWritePDFFromJSONFileKeepsRenderingWhenImageMissing(t *testing.T) {
+	dir := t.TempDir()
+	recipe := Recipe{
+		ID:          "missing-image",
+		Title:       "Missing Image Recipe",
+		Servings:    2,
+		ImageURL:    "missing.png",
+		Ingredients: []Ingredient{{Name: "rice", Quantity: 100, Unit: "g"}},
+		Steps:       []RecipeStep{{Number: 1, Text: "Cook the rice."}},
+	}
+	data, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "recipe.json")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(dir, "recipe.pdf")
+	if err := WritePDFFromJSONFile(input, output); err != nil {
+		t.Fatal(err)
+	}
+	pdfData, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(pdfData, []byte("Cover image: missing.png")) || !bytes.Contains(pdfData, []byte("1. Cook the rice.")) {
+		t.Fatalf("PDF did not keep text fallback after missing image\n%s", string(pdfData))
+	}
+}
+
+func assertSectionOrder(t *testing.T, lines []string, sections ...string) {
+	t.Helper()
+	last := -1
+	for _, section := range sections {
+		pos := -1
+		for i, line := range lines {
+			if line == section {
+				pos = i
+				break
+			}
+		}
+		if pos < 0 {
+			t.Fatalf("missing section %q in %+v", section, lines)
+		}
+		if pos <= last {
+			t.Fatalf("section %q out of order in %+v", section, lines)
+		}
+		last = pos
+	}
+}
+
 func writeTestPNG(t *testing.T, path string) {
 	t.Helper()
 	imageFile, err := os.Create(path)

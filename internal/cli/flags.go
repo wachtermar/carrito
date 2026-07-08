@@ -22,7 +22,7 @@ func marketFlag(fs *flag.FlagSet, usage string) *string {
 }
 
 func parseInterspersed(fs *flag.FlagSet, args []string, boolFlags map[string]bool) error {
-	if err := fs.Parse(reorderArgs(args, boolFlags)); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args, boolFlags)); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return errHelpRequested
 		}
@@ -31,7 +31,7 @@ func parseInterspersed(fs *flag.FlagSet, args []string, boolFlags map[string]boo
 	return nil
 }
 
-func reorderArgs(args []string, boolFlags map[string]bool) []string {
+func reorderArgs(fs *flag.FlagSet, args []string, boolFlags map[string]bool) []string {
 	var flagsPart []string
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -43,7 +43,7 @@ func reorderArgs(args []string, boolFlags map[string]bool) []string {
 		if isFlagToken(arg) {
 			flagsPart = append(flagsPart, arg)
 			name, hasValue := flagName(arg)
-			if !hasValue && !boolFlags[name] && i+1 < len(args) {
+			if !hasValue && !isBoolFlag(fs, name, boolFlags) && i+1 < len(args) {
 				flagsPart = append(flagsPart, args[i+1])
 				i++
 			}
@@ -52,6 +52,23 @@ func reorderArgs(args []string, boolFlags map[string]bool) []string {
 		positional = append(positional, arg)
 	}
 	return append(flagsPart, positional...)
+}
+
+func isBoolFlag(fs *flag.FlagSet, name string, boolFlags map[string]bool) bool {
+	if boolFlags != nil && boolFlags[name] {
+		return true
+	}
+	if fs == nil {
+		return false
+	}
+	f := fs.Lookup(name)
+	if f == nil {
+		return false
+	}
+	if v, ok := f.Value.(interface{ IsBoolFlag() bool }); ok {
+		return v.IsBoolFlag()
+	}
+	return false
 }
 
 func isFlagToken(s string) bool {

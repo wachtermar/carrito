@@ -70,30 +70,12 @@ func EstimatePurchaseQuantity(ingredient Ingredient, product ProductSummary) (co
 }
 
 func ParsePackageQuantity(values ...string) (float64, string, bool) {
-	text := normalizePackageText(strings.Join(values, " "))
-	if text == "" {
-		return 0, "", false
+	evidence := ParsePackageEvidence(values...)
+	if evidence.NetQuantity != nil && evidence.NetQuantity.Expected.Value > 0 && evidence.NetQuantity.Expected.Unit != "" {
+		return evidence.NetQuantity.Expected.Value, evidence.NetQuantity.Expected.Unit, true
 	}
-	if m := multipliedPackageRE.FindStringSubmatch(text); len(m) == 4 {
-		left, ok1 := parsePackageNumber(m[1])
-		right, ok2 := parsePackageNumber(m[2])
-		unit := normalizeUnit(m[3])
-		if ok1 && ok2 && unit != "" {
-			return left * right, unit, true
-		}
-	}
-	if m := countPackageRE.FindStringSubmatch(text); len(m) == 2 {
-		qty, ok := parsePackageNumber(m[1])
-		if ok {
-			return qty, "unit", true
-		}
-	}
-	if m := packageRE.FindStringSubmatch(text); len(m) == 3 {
-		qty, ok := parsePackageNumber(m[1])
-		unit := normalizeUnit(m[2])
-		if ok && unit != "" {
-			return qty, unit, true
-		}
+	if evidence.UnitQuantity != nil && evidence.UnitQuantity.Value > 0 {
+		return evidence.UnitQuantity.Value, evidence.UnitQuantity.Unit, true
 	}
 	return 0, "", false
 }

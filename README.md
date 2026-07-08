@@ -15,7 +15,7 @@ This project is not affiliated with Alcampo or Auchan. It uses private web APIs 
 - Reviews authenticated carts in read-only mode with normalized JSON for agents.
 - Prepares cart and checkout-slot workflows only behind explicit user approval and a nonzero spending guard.
 - Stores local food memory: household profile, diets/allergies/dislikes, pantry/fridge/freezer, staples, recipes, meal plans, history, and nutrition goals.
-- Generates pantry-aware meal plans, Alcampo shopping selections, basket files, recipe JSON, and printable PDFs.
+- Generates pantry-aware meal plans, Alcampo shopping selections, nutrition evidence ledgers, basket files, recipe JSON, and printable PDFs.
 - Supports desktop-safe login through `carrito login-web --if-needed`, so credentials are entered in a temporary local browser form instead of chat.
 
 The CLI intentionally does not implement payment or order submission.
@@ -96,8 +96,8 @@ Food planning with isolated local state:
 export CARRITO_CONFIG_DIR="$PWD/.carrito-dev"
 carrito food profile set --people 2 --selection-policy balanced --budget 80 --json
 carrito food pantry add rice --qty 500 --unit g --location pantry --json
-carrito food run --days 3 --people 2 --meals dinner --basket-out basket.txt --json
-carrito food pdf <shop-or-plan.json> --out food-plan.pdf
+carrito food run --days 3 --people 2 --meals dinner --servings 2 --basket-out basket.txt --run-out run.json --quantity-ledger-out ledger.json --nutrition-ledger-out nutrition_ledger.json --recovery-out recovery.json --recipe-swap-out recipe_swap.json --basket-optimization-out basket_optimization.json --serving-plan-out serving_plan.json --scaled-mealplan-out scaled_mealplan.json --pantry-out pantry.json --pantry-consumption-out pantry_consumption.json --readiness-out readiness.json --pdf-out food-plan.pdf --enrich-products --strict-quantity --strict-servings --recover-missing --allow-recipe-swap --optimize-basket --basket-objective safe-balanced --deal-aware --default-pantry minimal-spanish --allow-assumed-pantry --require-safe-basket --require-cook-ready --json
+carrito food pdf <recipe-or-plan-shop-run.json> --out food-plan.pdf
 ```
 
 Authenticated cart review:
@@ -121,7 +121,7 @@ The skill is designed for agent surfaces, not as a hidden autonomous purchasing 
 - Agents must run `carrito login-web --if-needed --json` before authenticated reads when no session exists.
 - Agents must use `--json` output and parse stdout as data; stderr is diagnostics.
 - Open-ended meal plans and shopping runs must pass the intake gate first: people, meal scope, diet/allergy/dislike constraints, budget, pantry stance, and selection policy.
-- Product selections must show images, prices, quantities, package math, selection reasons, alternates, missing items, and estimated totals before cart mutation.
+- Product selections must show images, prices, quantities, package math, `serving_plan.status` and scaled serving assumptions when present, `quantity_ledger.status`, `nutrition_ledger.status` and `readiness_gate.safe_to_report_nutrition` when present, `pre_recipe_swap_readiness_gate.status` when present, `recipe_swap_plan.status` when present, `basket_optimization_plan.status` when present, `pantry_resolution.status` when present, final `readiness_gate.status`, final `readiness_gate.safe_to_build`, final `readiness_gate.safe_to_cook`, `recovery_plan.status` when present, nutrition coverage, selection reasons, alternates, missing/review-only items, and estimated totals before cart mutation. Treat exit code 20 from `food run --require-safe-basket`, `--require-cook-ready`, or `--require-nutrition-ready` as a generated diagnostic artifact, not a tool crash; the basket file is structurally safe for cart prep only when final `readiness_gate.safe_to_build` is true, the meal plan is complete to cook only when final `readiness_gate.safe_to_cook` is true, and nutrition/macros are safe to present as evidence-backed only when final `readiness_gate.safe_to_report_nutrition` is true.
 - Cart and checkout writes require explicit approval plus `--max`, `CARRITO_MAX_EUR`, or `[limits] max_eur`.
 - Payment and order submission are out of scope and unsupported.
 

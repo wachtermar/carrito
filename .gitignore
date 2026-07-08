@@ -13,4 +13,5 @@
 *.pdf
 basket.txt
 *-shop.json
+.devspace/
 .hermes-output/

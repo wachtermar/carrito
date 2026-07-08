@@ -6,6 +6,7 @@ This project follows semantic versioning once public tags are created.
 
 ## Unreleased
 
+- Added evidence-led food-run nutrition ledgers with consumed-quantity totals, pantry nutrition gaps, PDF nutrition sections, and separate nutrition readiness reporting.
 - Made the Go module installable from `github.com/wachtermar/carrito`.
 - Added release-ready documentation for CLI, Hermes, and OpenClaw installs.
 - Added OpenClaw-compatible `metadata.openclaw.install` Go installer metadata.

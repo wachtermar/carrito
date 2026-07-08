@@ -204,6 +204,126 @@ func printShopResult(w io.Writer, result food.ShopResult) {
 	}
 }
 
+func printQuantityLedgerSummary(w io.Writer, ledger food.QuantityLedger, safety food.BasketSafety) {
+	fmt.Fprintf(w, "ledger\tstatus=%s\tbasket=%s\tsafe=%t\n", ledger.Status, safety.Status, safety.SafeToBuild)
+	fmt.Fprintf(w, "  ingredient_coverage\t%d/%d\n", ledger.Summary.CoveredIngredientCount, ledger.Summary.IngredientCount)
+	fmt.Fprintf(w, "  exact_quantity_lines\t%d\n", ledger.Summary.ExactQuantityLines)
+	fmt.Fprintf(w, "  estimated_variable_weight_lines\t%d\n", ledger.Summary.EstimatedVariableWeightLines)
+	fmt.Fprintf(w, "  needs_review_lines\t%d\n", ledger.Summary.NeedsReviewLines)
+	fmt.Fprintf(w, "  missing_lines\t%d\n", ledger.Summary.MissingLines)
+	if ledger.Nutrition != nil {
+		fmt.Fprintf(w, "  nutrition_label_coverage\t%.0f%%\n", ledger.Nutrition.Coverage.CalorieCoverageRatio*100)
+	}
+	if ledger.Totals.EstimatedTotal.Expected.Amount != "" {
+		fmt.Fprintf(w, "  estimated_total\t%s\n", formatMoney(ledger.Totals.EstimatedTotal.Expected))
+	}
+	if safety.Reason != "" {
+		fmt.Fprintf(w, "  basket_safety\t%s\n", safety.Reason)
+	}
+	for _, warning := range ledger.Warnings {
+		if warning.Message != "" {
+			fmt.Fprintf(w, "  warning\t%s\n", warning.Message)
+		}
+	}
+}
+
+func printReadinessGate(w io.Writer, gate food.ReadinessGate) {
+	fmt.Fprintln(w, food.ReadinessSummaryLine(gate))
+	for _, issue := range gate.BlockingIssues {
+		fmt.Fprintf(w, "  blocking\t%s\n", issue.Message)
+	}
+	for _, warning := range gate.Warnings {
+		fmt.Fprintf(w, "  caveat\t%s\n", warning.Message)
+	}
+}
+
+func printServingSummary(w io.Writer, plan food.ServingPlan, scaled *food.ScaledMealPlan) {
+	fmt.Fprintf(w, "serving\tstatus=%s\ttarget=%.3g\tcooked=%.3g\tscaled_slots=%d\n",
+		plan.Status,
+		plan.Summary.TotalTargetServingUnits,
+		plan.Summary.TotalCookedServingUnits,
+		plan.Summary.SlotsScaled,
+	)
+	if scaled != nil {
+		fmt.Fprintf(w, "  scaled_ingredients\texact=%d\trounded=%d\tto_taste=%d\tblocked=%d\n",
+			scaled.Summary.ExactLines,
+			scaled.Summary.RoundedPieceLines,
+			scaled.Summary.ToTasteLines,
+			scaled.Summary.BlockedLines,
+		)
+	}
+	for _, issue := range plan.BlockingIssues {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  blocking\t%s\n", issue.Message)
+		}
+	}
+	for _, issue := range plan.Warnings {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  warning\t%s\n", issue.Message)
+		}
+	}
+}
+
+func printNutritionLedgerSummary(w io.Writer, ledger food.NutritionLedger) {
+	fmt.Fprintf(w, "nutrition_ledger\tstatus=%s\tcoverage=%d/%d\tlabel_coverage=%d/%d\n",
+		ledger.Status,
+		ledger.Coverage.LinesWithAnyNutrition,
+		ledger.Coverage.IngredientLines,
+		ledger.Coverage.LinesWithAlcampoLabel,
+		ledger.Coverage.IngredientLines,
+	)
+	if ledger.Coverage.QuantityCoverageRatio != nil {
+		fmt.Fprintf(w, "  quantity_coverage\t%.0f%%\n", *ledger.Coverage.QuantityCoverageRatio*100)
+	}
+	if ledger.TotalConsumedKnown != nil && ledger.TotalConsumedKnown.Facts.EnergyKcal != nil {
+		fmt.Fprintf(w, "  known_kcal\t%.3g\n", ledger.TotalConsumedKnown.Facts.EnergyKcal.Value)
+	}
+	for _, issue := range ledger.BlockingIssues {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  blocking\t%s\n", issue.Message)
+		}
+	}
+}
+
+func printBasketOptimization(w io.Writer, plan food.BasketOptimizationPlan) {
+	changed := 0
+	for _, decision := range plan.Decisions {
+		if decision.Changed {
+			changed++
+		}
+	}
+	fmt.Fprintf(w, "basket_optimization\tstatus=%s\tobjective=%s\tchanged=%d\n", plan.Status, strings.ReplaceAll(plan.Policy.Objective, "_", "-"), changed)
+	if plan.OptimizedSummary != nil && plan.BaselineSummary.EffectiveSubtotalCents > 0 {
+		delta := plan.OptimizedSummary.EffectiveSubtotalCents - plan.BaselineSummary.EffectiveSubtotalCents
+		if delta != 0 {
+			fmt.Fprintf(w, "  subtotal_delta\t%s\n", formatSignedCLIAmount(delta))
+		}
+	}
+	for _, decision := range plan.Decisions {
+		if !decision.Changed {
+			continue
+		}
+		fmt.Fprintf(w, "  switched\t%s\t%s -> %s\n", decision.IngredientName, strutil.FirstNonEmpty(decision.BaselineProductName, "-"), strutil.FirstNonEmpty(decision.SelectedProductName, "-"))
+		if decision.Reason != "" {
+			fmt.Fprintf(w, "    reason\t%s\n", decision.Reason)
+		}
+	}
+	for _, warning := range plan.Warnings {
+		if warning.Message != "" {
+			fmt.Fprintf(w, "  warning\t%s\n", warning.Message)
+		}
+	}
+}
+
+func formatSignedCLIAmount(cents int) string {
+	sign := "+"
+	if cents < 0 {
+		sign = "-"
+		cents = -cents
+	}
+	return sign + money.FormatAmount(int64(cents))
+}
+
 func printProductLine(w io.Writer, p alcampo.Product) {
 	fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 		strutil.FirstNonEmpty(p.SKU, p.ID, "-"),

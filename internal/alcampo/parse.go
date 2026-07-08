@@ -61,6 +61,9 @@ func productFromMap(m map[string]any, baseURL string) Product {
 		Size:        stringFromKeys(m, "size", "format", "packSize", "packSizeDescription", "netContent"),
 		EAN:         stringFromKeys(m, "ean", "gtin", "gtin13"),
 		Description: stripHTML(stringFromKeys(m, "description", "shortDescription")),
+		Ingredients: stripHTML(stringFromKeys(m, "ingredients", "ingredientStatement")),
+		Allergens:   stripHTML(stringFromKeys(m, "allergens", "allergenInfo")),
+		Nutrition:   stripHTML(stringFromKeys(m, "nutrition", "nutritionInfo", "nutritionalInformation")),
 	}
 	if p.Brand == "" {
 		p.Brand = stringFromKeys(m, "brandName")
