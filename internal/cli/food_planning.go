@@ -1,0 +1,364 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"path/filepath"
+	"strings"
+
+	"github.com/wachtermar/carrito/internal/food"
+	"github.com/wachtermar/carrito/internal/output"
+)
+
+type foodPlanOptions struct {
+	Days      int
+	People    int
+	BudgetEUR string
+	Meals     string
+	OutPath   string
+}
+
+func runFoodPlan(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food plan", stderr)
+	days := fs.Int("days", 3, "number of days")
+	people := fs.Int("people", 0, "people count; required unless saved in profile")
+	budget := fs.String("budget", "", "budget in EUR")
+	meals := fs.String("meals", "dinner", "comma-separated meal types")
+	outPath := fs.String("out", "", "optional output JSON path")
+	jsonOut := fs.Bool("json", false, "write JSON to stdout")
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+		return err
+	}
+	profile, pantry, err := loadFoodPlanningInputs()
+	if err != nil {
+		return err
+	}
+	plan, err := buildSavedFoodPlan(profile, pantry, foodPlanOptions{
+		Days:      *days,
+		People:    *people,
+		BudgetEUR: *budget,
+		Meals:     *meals,
+		OutPath:   *outPath,
+	})
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return output.JSON(stdout, plan)
+	}
+	printMealPlan(stdout, plan)
+	return nil
+}
+
+func runFoodUseUp(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food use-up", stderr)
+	days := fs.Int("expiring-days", 3, "rank recipes using pantry items expiring within N days")
+	limit := fs.Int("limit", 8, "maximum recipes to return")
+	jsonOut := fs.Bool("json", false, "write JSON to stdout")
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+		return err
+	}
+	profile, err := food.LoadProfile()
+	if err != nil {
+		return err
+	}
+	pantry, err := food.LoadPantry()
+	if err != nil {
+		return err
+	}
+	suggestions, err := food.SuggestUseUpRecipes(profile, pantry, *days, *limit)
+	if err != nil {
+		return err
+	}
+	if *jsonOut {
+		return output.JSON(stdout, suggestions)
+	}
+	if len(suggestions) == 0 {
+		fmt.Fprintln(stdout, "no expiring pantry matches found")
+		return nil
+	}
+	for _, suggestion := range suggestions {
+		printUseUpSuggestion(stdout, suggestion)
+	}
+	return nil
+}
+
+func runFoodRecipe(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food recipe", stderr)
+	people := fs.Int("people", 0, "people count; defaults to profile or 2")
+	outPath := fs.String("out", "", "optional output JSON path")
+	jsonOut := fs.Bool("json", false, "write JSON to stdout")
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+		return err
+	}
+	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	if prompt == "" {
+		return errors.New("food recipe requires a prompt or mealplan id/path")
+	}
+	profile, err := food.LoadProfile()
+	if err != nil {
+		return err
+	}
+	if plan, err := food.LoadMealPlan(prompt); err == nil {
+		recipes := recipesFromPlan(plan)
+		res := struct {
+			MealPlanID string        `json:"mealplan_id"`
+			Recipes    []food.Recipe `json:"recipes"`
+		}{MealPlanID: plan.ID, Recipes: recipes}
+		if *outPath != "" {
+			if err := writeJSONPath(*outPath, res); err != nil {
+				return err
+			}
+		}
+		if *jsonOut {
+			return output.JSON(stdout, res)
+		}
+		for _, recipe := range recipes {
+			printRecipe(stdout, recipe)
+		}
+		return nil
+	}
+	recipe, err := food.GenerateRecipe(prompt, profile, *people)
+	if err != nil {
+		return err
+	}
+	if *outPath != "" {
+		if err := writeJSONPath(*outPath, recipe); err != nil {
+			return err
+		}
+	}
+	if *jsonOut {
+		return output.JSON(stdout, recipe)
+	}
+	printRecipe(stdout, recipe)
+	return nil
+}
+
+func runFoodShop(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food shop", stderr)
+	policy := fs.String("selection-policy", "", "balanced, cheapest, or quality; saved if provided")
+	limit := fs.Int("limit", 8, "candidate products per ingredient")
+	outPath := fs.String("out", "", "optional output JSON path")
+	basketOut := fs.String("basket-out", "", "optional basket file path for guarded cart set-many")
+	store := marketFlag(fs, "Alcampo region/store UUID to use for pricing")
+	jsonOut := fs.Bool("json", false, "write JSON to stdout")
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("food shop requires a mealplan JSON path or saved mealplan id")
+	}
+	profile, err := food.LoadProfile()
+	if err != nil {
+		return err
+	}
+	resolvedPolicy, err := resolveAndSaveFoodPolicy(&profile, *policy, stderr)
+	if err != nil {
+		return err
+	}
+	plan, err := food.LoadMealPlan(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	result, err := shopFoodPlan(plan, profile, resolvedPolicy, *limit, *store)
+	if err != nil {
+		return err
+	}
+	if err := writeFoodShopOutputs(result, *outPath, *basketOut); err != nil {
+		return err
+	}
+	if *jsonOut {
+		return output.JSON(stdout, result)
+	}
+	printShopResult(stdout, result)
+	if *basketOut != "" {
+		fmt.Fprintf(stdout, "basket\t%s\n", *basketOut)
+	}
+	return nil
+}
+
+func runFoodPDF(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food pdf", stderr)
+	outPath := fs.String("out", "", "output PDF path")
+	if err := parseInterspersed(fs, args, nil); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("food pdf requires a recipe, mealplan, or shop JSON file")
+	}
+	input := fs.Arg(0)
+	if *outPath == "" {
+		ext := filepath.Ext(input)
+		if ext == "" {
+			*outPath = input + ".pdf"
+		} else {
+			*outPath = strings.TrimSuffix(input, ext) + ".pdf"
+		}
+	}
+	if err := food.WritePDFFromJSONFile(input, *outPath); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "pdf\t%s\n", *outPath)
+	return nil
+}
+
+func runFoodRun(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food run", stderr)
+	days := fs.Int("days", 3, "number of days")
+	people := fs.Int("people", 0, "people count; required unless saved in profile")
+	budget := fs.String("budget", "", "budget in EUR")
+	meals := fs.String("meals", "dinner", "comma-separated meal types")
+	policy := fs.String("selection-policy", "", "balanced, cheapest, or quality; saved if provided")
+	limit := fs.Int("limit", 8, "candidate products per ingredient")
+	planOut := fs.String("plan-out", "", "optional mealplan JSON path")
+	shopOut := fs.String("shop-out", "", "optional shopping JSON path")
+	basketOut := fs.String("basket-out", "", "optional basket file path for guarded cart set-many")
+	pdfOut := fs.String("pdf-out", "", "optional shopping PDF path")
+	store := marketFlag(fs, "Alcampo region/store UUID to use for pricing")
+	jsonOut := fs.Bool("json", false, "write JSON to stdout")
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
+		return err
+	}
+	profile, pantry, err := loadFoodPlanningInputs()
+	if err != nil {
+		return err
+	}
+	resolvedPolicy, err := resolveAndSaveFoodPolicy(&profile, *policy, stderr)
+	if err != nil {
+		return err
+	}
+	plan, err := buildSavedFoodPlan(profile, pantry, foodPlanOptions{
+		Days:      *days,
+		People:    *people,
+		BudgetEUR: *budget,
+		Meals:     *meals,
+		OutPath:   *planOut,
+	})
+	if err != nil {
+		return err
+	}
+	shop, err := shopFoodPlan(plan, profile, resolvedPolicy, *limit, *store)
+	if err != nil {
+		return err
+	}
+	if err := writeFoodShopOutputs(shop, *shopOut, *basketOut); err != nil {
+		return err
+	}
+	pdfPath, err := writeFoodRunPDF(plan, shop, *shopOut, *pdfOut)
+	if err != nil {
+		return err
+	}
+	res := struct {
+		MealPlan food.MealPlan   `json:"mealplan"`
+		Shop     food.ShopResult `json:"shop"`
+		PDF      string          `json:"pdf,omitempty"`
+		Basket   string          `json:"basket,omitempty"`
+	}{MealPlan: plan, Shop: shop, PDF: pdfPath, Basket: *basketOut}
+	if *jsonOut {
+		return output.JSON(stdout, res)
+	}
+	printMealPlan(stdout, plan)
+	printShopResult(stdout, shop)
+	if pdfPath != "" {
+		fmt.Fprintf(stdout, "pdf\t%s\n", pdfPath)
+	}
+	if *basketOut != "" {
+		fmt.Fprintf(stdout, "basket\t%s\n", *basketOut)
+	}
+	return nil
+}
+
+func loadFoodPlanningInputs() (food.Profile, food.Pantry, error) {
+	profile, err := food.LoadProfile()
+	if err != nil {
+		return food.Profile{}, food.Pantry{}, err
+	}
+	pantry, err := food.LoadPantry()
+	if err != nil {
+		return food.Profile{}, food.Pantry{}, err
+	}
+	return profile, pantry, nil
+}
+
+func buildSavedFoodPlan(profile food.Profile, pantry food.Pantry, opts foodPlanOptions) (food.MealPlan, error) {
+	plan, err := food.GenerateMealPlan(profile, pantry, food.PlanOptions{
+		Days:      opts.Days,
+		People:    opts.People,
+		BudgetEUR: opts.BudgetEUR,
+		MealTypes: splitList(opts.Meals),
+	})
+	if err != nil {
+		return food.MealPlan{}, err
+	}
+	if opts.OutPath != "" {
+		plan.File = opts.OutPath
+		if err := writeJSONPath(opts.OutPath, plan); err != nil {
+			return food.MealPlan{}, err
+		}
+		return plan, nil
+	}
+	return food.SaveMealPlan(plan)
+}
+
+func resolveAndSaveFoodPolicy(profile *food.Profile, explicit string, stderr io.Writer) (string, error) {
+	resolvedPolicy, updatedProfile, err := resolveFoodSelectionPolicy(profile, explicit, stderr)
+	if err != nil {
+		return "", err
+	}
+	if updatedProfile {
+		if err := food.SaveProfile(*profile); err != nil {
+			return "", err
+		}
+	}
+	return resolvedPolicy, nil
+}
+
+func shopFoodPlan(plan food.MealPlan, profile food.Profile, policy string, limit int, store string) (food.ShopResult, error) {
+	cfg, client, err := newClient(store)
+	if err != nil {
+		return food.ShopResult{}, err
+	}
+	regionID, err := resolveMarket(cfg, store)
+	if err != nil {
+		return food.ShopResult{}, err
+	}
+	client.RegionID = regionID
+	return food.ShopMealPlan(context.Background(), client, plan, profile, food.ShopOptions{Policy: policy, Limit: limit})
+}
+
+func writeFoodShopOutputs(shop food.ShopResult, outPath, basketOut string) error {
+	if outPath != "" {
+		if err := writeJSONPath(outPath, shop); err != nil {
+			return err
+		}
+	}
+	if basketOut != "" {
+		if err := writeBasketLinesPath(basketOut, shop.BasketLines); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFoodRunPDF(plan food.MealPlan, shop food.ShopResult, shopOut, pdfOut string) (string, error) {
+	if pdfOut == "" {
+		return "", nil
+	}
+	source := shopOut
+	if source == "" {
+		dir, err := food.MealPlansDir()
+		if err != nil {
+			return "", err
+		}
+		source = filepath.Join(dir, plan.ID+"-shop.json")
+		if err := writeJSONPath(source, shop); err != nil {
+			return "", err
+		}
+	}
+	if err := food.WritePDFFromJSONFile(source, pdfOut); err != nil {
+		return "", err
+	}
+	return pdfOut, nil
+}
