@@ -51,6 +51,7 @@ type FoodRunManifest struct {
 	ArtifactSizes        map[string]int64          `json:"artifact_sizes,omitempty"`
 	Fingerprints         FoodRunFingerprintSummary `json:"fingerprints"`
 	Readiness            FoodRunManifestReadiness  `json:"readiness"`
+	Snapshot             *ManifestSnapshotSummary  `json:"snapshot,omitempty"`
 }
 
 type FoodRunFingerprintSummary struct {
@@ -93,6 +94,19 @@ type FoodRunManifestOptions struct {
 	GenerationExitCode   int
 	GenerationExitReason string
 	ArtifactPaths        map[string]string
+	Snapshot             *ManifestSnapshotSummary
+}
+
+type ManifestSnapshotSummary struct {
+	Mode                 string `json:"mode,omitempty"`
+	SnapshotID           string `json:"snapshot_id,omitempty"`
+	SnapshotDir          string `json:"snapshot_dir,omitempty"`
+	SnapshotManifestPath string `json:"snapshot_manifest_path,omitempty"`
+	EntryCount           int    `json:"entry_count,omitempty"`
+	ReplayStrict         bool   `json:"replay_strict,omitempty"`
+	SnapshotSHA256       string `json:"snapshot_sha256,omitempty"`
+	ReplayHits           int    `json:"replay_hits"`
+	ReplayMisses         int    `json:"replay_misses"`
 }
 
 type ArtifactAuditOptions struct {
@@ -156,6 +170,9 @@ type ArtifactAuditMetrics struct {
 	BasketBlankLines      int   `json:"basket_blank_lines"`
 	SelectedProductCount  int   `json:"selected_product_count"`
 	PDFSizeBytes          int64 `json:"pdf_size_bytes,omitempty"`
+	SnapshotEntryCount    int   `json:"snapshot_entry_count,omitempty"`
+	SnapshotReplayHits    int   `json:"snapshot_replay_hits,omitempty"`
+	SnapshotReplayMisses  int   `json:"snapshot_replay_misses"`
 }
 
 type ArtifactAuditCheck struct {

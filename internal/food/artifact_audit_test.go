@@ -1,11 +1,15 @@
 package food
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/wachtermar/carrito/internal/alcampo"
 	"github.com/wachtermar/carrito/internal/money"
 )
 
@@ -81,6 +85,77 @@ func TestArtifactAuditSidecarMismatchFailsEvenWhenManifestHashMatches(t *testing
 	}
 	if !hasAuditIssue(report, "quantity_ledger_matches_embedded_run") {
 		t.Fatalf("expected sidecar mismatch issue, got %+v", report.BlockingIssues)
+	}
+}
+
+func TestArtifactAuditSnapshotCorruptResponseFails(t *testing.T) {
+	run := auditTestRun(t)
+	paths := writeAuditBundle(t, run, nil)
+	var manifest FoodRunManifest
+	readAuditJSON(t, paths["manifest"], &manifest)
+	snapshotDir := filepath.Join(filepath.Dir(paths["manifest"]), "snapshot")
+	responsesDir := filepath.Join(snapshotDir, "responses")
+	if err := os.MkdirAll(responsesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := []byte(`{"productGroups":[]}`)
+	bodySum := sha256.Sum256(body)
+	bodyHash := hex.EncodeToString(bodySum[:])
+	responsePath := filepath.Join("responses", "000001_search_deadbeef1234.json")
+	writeAuditJSON(t, filepath.Join(snapshotDir, responsePath), map[string]any{
+		"schema_version": alcampo.LiveSnapshotSchemaVersion,
+		"status_code":    200,
+		"body_sha256":    bodyHash,
+		"body_base64":    base64.StdEncoding.EncodeToString([]byte("corrupted response")),
+	})
+	snapshot := alcampo.LiveSnapshotManifest{
+		SchemaVersion: alcampo.LiveSnapshotSchemaVersion,
+		SnapshotID:    "audit-corrupt-snapshot",
+		Mode:          alcampo.LiveSnapshotModeRecord,
+		EntryCount:    1,
+		Entries: []alcampo.LiveSnapshotEntry{{
+			Sequence:         1,
+			ID:               "000001-deadbeef1234",
+			RequestSignature: "sig",
+			ShortSignature:   "deadbeef1234",
+			RequestKind:      alcampo.SnapshotKindSearch,
+			Method:           "GET",
+			ResponsePath:     responsePath,
+			ResponseSHA256:   bodyHash,
+			ResponseBytes:    int64(len(body)),
+			StatusCode:       200,
+		}},
+	}
+	snapshotPath := filepath.Join(snapshotDir, alcampo.LiveSnapshotManifestFile)
+	writeAuditJSON(t, snapshotPath, snapshot)
+	snapshotData, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotSum := sha256.Sum256(snapshotData)
+	manifest.Snapshot = &ManifestSnapshotSummary{
+		Mode:                 alcampo.LiveSnapshotModeRecord,
+		SnapshotID:           snapshot.SnapshotID,
+		SnapshotDir:          snapshotDir,
+		SnapshotManifestPath: snapshotPath,
+		EntryCount:           1,
+		SnapshotSHA256:       hex.EncodeToString(snapshotSum[:]),
+	}
+	writeAuditJSON(t, paths["manifest"], manifest)
+
+	report, err := AuditFoodRunArtifacts(ArtifactAuditOptions{
+		Mode:         ArtifactAuditModeFail,
+		ContextMode:  "ci",
+		ManifestPath: paths["manifest"],
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != ArtifactAuditStatusFail {
+		t.Fatalf("status = %s, want fail", report.Status)
+	}
+	if !hasAuditIssue(report, "snapshot_response_hash_matches_entry") {
+		t.Fatalf("expected snapshot hash issue, got %+v", report.BlockingIssues)
 	}
 }
 
@@ -189,6 +264,17 @@ func writeAuditJSON(t *testing.T, path string, value any) {
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func readAuditJSON(t *testing.T, path string, value any) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, value); err != nil {
+		t.Fatalf("%s was not JSON: %v\n%s", path, err, string(data))
 	}
 }
 

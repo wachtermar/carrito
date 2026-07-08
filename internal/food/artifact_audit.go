@@ -3,6 +3,7 @@ package food
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/wachtermar/carrito/internal/alcampo"
 )
 
 func NormalizeArtifactAuditMode(raw string) (string, error) {
@@ -47,6 +50,10 @@ func BuildFoodRunManifest(artifact FoodRunArtifact, opts FoodRunManifestOptions)
 	if runID == "" {
 		runID = artifact.CreatedAt
 	}
+	snapshotMode := opts.SnapshotMode
+	if snapshotMode == "" && opts.Snapshot != nil {
+		snapshotMode = opts.Snapshot.Mode
+	}
 	readiness := manifestReadinessFromArtifact(artifact)
 	readiness.GenerationExitCode = opts.GenerationExitCode
 	readiness.GenerationExitReason = opts.GenerationExitReason
@@ -60,7 +67,7 @@ func BuildFoodRunManifest(artifact FoodRunArtifact, opts FoodRunManifestOptions)
 		StoreID:              opts.StoreID,
 		StoreName:            opts.StoreName,
 		LiveMode:             opts.LiveMode,
-		SnapshotMode:         opts.SnapshotMode,
+		SnapshotMode:         snapshotMode,
 		AuditMode:            mode,
 		GenerationExitCode:   opts.GenerationExitCode,
 		GenerationExitReason: opts.GenerationExitReason,
@@ -69,6 +76,7 @@ func BuildFoodRunManifest(artifact FoodRunArtifact, opts FoodRunManifestOptions)
 		ArtifactSizes:        sizes,
 		Fingerprints:         manifestFingerprintsFromArtifact(artifact),
 		Readiness:            readiness,
+		Snapshot:             opts.Snapshot,
 	}, nil
 }
 
@@ -133,6 +141,7 @@ func AuditFoodRunArtifacts(opts ArtifactAuditOptions) (ArtifactAuditReport, erro
 	auditRunFingerprints(&report, run)
 	if manifest != nil {
 		auditManifestSummary(&report, *manifest, run)
+		auditManifestSnapshot(&report, *manifest)
 	}
 	auditSidecarEquality(&report, run, paths)
 	auditDerivedArtifactFingerprints(&report, run)
@@ -280,6 +289,77 @@ func auditManifestSummary(report *ArtifactAuditReport, manifest FoodRunManifest,
 		expectedExit := expectedGenerationExitCode(*run.ReadinessGate)
 		report.addCheck("manifest_generation_exit_consistent", "manifest", "blocking", manifest.GenerationExitCode == expectedExit, "manifest", "$.generation_exit_code", "Manifest generation exit code must match readiness policy.", "Regenerate the manifest after readiness evaluation.", expectedExit, manifest.GenerationExitCode)
 	}
+}
+
+func auditManifestSnapshot(report *ArtifactAuditReport, manifest FoodRunManifest) {
+	if manifest.Snapshot == nil || strings.TrimSpace(manifest.Snapshot.Mode) == "" {
+		return
+	}
+	summary := manifest.Snapshot
+	report.Metrics.SnapshotEntryCount = summary.EntryCount
+	report.Metrics.SnapshotReplayHits = summary.ReplayHits
+	report.Metrics.SnapshotReplayMisses = summary.ReplayMisses
+	path := strings.TrimSpace(summary.SnapshotManifestPath)
+	if path == "" {
+		report.addCheck("snapshot_manifest_path_present", "snapshot", "blocking", false, "snapshot", "$.snapshot.snapshot_manifest_path", "Snapshot manifest path must be present when snapshot mode is active.", "Regenerate the food run with snapshot flags.")
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		report.addCheck("snapshot_manifest_readable", "snapshot", "blocking", false, "snapshot", "$.snapshot.snapshot_manifest_path", "Snapshot manifest is missing or unreadable.", err.Error())
+		return
+	}
+	hash := sha256.Sum256(data)
+	gotManifestHash := hex.EncodeToString(hash[:])
+	if summary.SnapshotSHA256 != "" {
+		report.addCheck("snapshot_manifest_hash_matches", "snapshot", "blocking", summary.SnapshotSHA256 == gotManifestHash, "snapshot", "$.snapshot.snapshot_sha256", "Snapshot manifest hash must match.", "Regenerate the manifest after snapshot recording/replay.", summary.SnapshotSHA256, gotManifestHash)
+	}
+	var snap alcampo.LiveSnapshotManifest
+	if err := json.Unmarshal(data, &snap); err != nil {
+		report.addCheck("snapshot_manifest_valid", "snapshot", "blocking", false, "snapshot", "$.snapshot", "Snapshot manifest JSON must be valid.", err.Error())
+		return
+	}
+	report.addCheck("snapshot_manifest_schema", "snapshot", "blocking", snap.SchemaVersion == alcampo.LiveSnapshotSchemaVersion, "snapshot", "$.snapshot.schema_version", "Snapshot manifest schema must be supported.", "Regenerate the snapshot with the current carrito binary.", alcampo.LiveSnapshotSchemaVersion, snap.SchemaVersion)
+	report.addCheck("snapshot_entry_count_matches", "snapshot", "blocking", snap.EntryCount == summary.EntryCount && snap.EntryCount == len(snap.Entries), "snapshot", "$.snapshot.entry_count", "Snapshot entry count must match manifest entries.", "Regenerate the snapshot.", summary.EntryCount, snap.EntryCount)
+	if summary.Mode == alcampo.LiveSnapshotModeReplay && summary.ReplayStrict {
+		report.addCheck("snapshot_replay_no_misses", "snapshot", "blocking", summary.ReplayMisses == 0, "snapshot", "$.snapshot.replay_misses", "Strict snapshot replay must have zero misses.", "Record a new snapshot or run with the matching input.", 0, summary.ReplayMisses)
+	}
+	blockingIssues := 0
+	for _, issue := range snap.Warnings {
+		if strings.EqualFold(issue.Severity, "blocking") {
+			blockingIssues++
+		}
+	}
+	report.addCheck("snapshot_no_blocking_issues", "snapshot", "blocking", blockingIssues == 0, "snapshot", "$.warnings", "Snapshot manifest must not contain blocking issues.", "Regenerate the snapshot after resolving policy failures.", 0, blockingIssues)
+	baseDir := filepath.Dir(path)
+	for _, entry := range snap.Entries {
+		auditSnapshotResponseEntry(report, baseDir, entry)
+	}
+}
+
+func auditSnapshotResponseEntry(report *ArtifactAuditReport, baseDir string, entry alcampo.LiveSnapshotEntry) {
+	path := filepath.Join(baseDir, entry.ResponsePath)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		report.addCheck("snapshot_response_readable", "snapshot", "blocking", false, "snapshot", "$.entries.response_path", "Snapshot response file is missing or unreadable.", err.Error())
+		return
+	}
+	var response struct {
+		BodySHA256 string `json:"body_sha256"`
+		BodyBase64 string `json:"body_base64"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		report.addCheck("snapshot_response_valid", "snapshot", "blocking", false, "snapshot", "$.entries.response_path", "Snapshot response file JSON must be valid.", err.Error())
+		return
+	}
+	body, err := base64.StdEncoding.DecodeString(response.BodyBase64)
+	if err != nil {
+		report.addCheck("snapshot_response_body_base64", "snapshot", "blocking", false, "snapshot", "$.entries.response_path", "Snapshot response body must be base64 encoded.", err.Error())
+		return
+	}
+	sum := sha256.Sum256(body)
+	bodyHash := hex.EncodeToString(sum[:])
+	report.addCheck("snapshot_response_hash_matches_entry", "snapshot", "blocking", bodyHash == entry.ResponseSHA256 && bodyHash == response.BodySHA256, "snapshot", "$.entries.response_sha256", "Snapshot response body hash must match the manifest entry.", "Regenerate the snapshot; the response file was modified.", entry.ResponseSHA256, bodyHash)
 }
 
 func checkManifestFingerprint(report *ArtifactAuditReport, name, jsonPath, actual, expected string) {

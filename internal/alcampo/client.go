@@ -35,6 +35,7 @@ type Client struct {
 	visitorID  string
 
 	httpClient *http.Client
+	snapshot   *liveSnapshotSession
 
 	mu          sync.Mutex
 	initialized bool
@@ -97,17 +98,9 @@ func (c *Client) InitSession(ctx context.Context) error {
 		return err
 	}
 	c.setPageHeaders(req, c.BaseURL+"/")
-	resp, err := c.httpClient.Do(req)
+	body, err := c.do(req)
 	if err != nil {
 		return err
-	}
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 399 {
-		return &httpx.StatusError{Method: req.Method, URL: req.URL.String(), StatusCode: resp.StatusCode, Status: resp.Status, Body: snippet(body)}
-	}
-	if readErr != nil {
-		return readErr
 	}
 	if version := extractSourceVersion(body); version != "" {
 		c.SourceVersion = version
@@ -219,6 +212,9 @@ func (c *Client) getPage(ctx context.Context, pathOrURL, referer string) ([]byte
 }
 
 func (c *Client) do(req *http.Request) ([]byte, error) {
+	if body, handled, err := c.doSnapshot(req); handled {
+		return body, err
+	}
 	c.throttle()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -226,6 +222,9 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 6<<20))
+	if recordErr := c.recordSnapshotResponse(req, resp.StatusCode, resp.Header.Get("Content-Type"), body); recordErr != nil {
+		return nil, recordErr
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 399 {
 		return nil, &httpx.StatusError{Method: req.Method, URL: req.URL.String(), StatusCode: resp.StatusCode, Status: resp.Status, Body: snippet(body)}
 	}

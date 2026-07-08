@@ -235,6 +235,10 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	manifestOut := fs.String("manifest-out", "", "optional food run manifest JSON path")
 	auditOut := fs.String("audit-out", "", "optional artifact audit report JSON path")
 	auditModeFlag := fs.String("audit-mode", food.ArtifactAuditModeOff, "artifact audit exit behavior: off, warn, or fail")
+	recordLiveSnapshot := fs.String("record-live-snapshot", "", "record read-only Alcampo HTTP responses into a live snapshot directory")
+	replayLiveSnapshot := fs.String("replay-live-snapshot", "", "replay read-only Alcampo HTTP responses from a live snapshot directory")
+	snapshotStrict := fs.Bool("snapshot-strict", false, "fail when a replay snapshot is missing a request signature")
+	snapshotID := fs.String("snapshot-id", "", "optional snapshot id when recording live responses")
 	nutritionMode := fs.String("nutrition-mode", "hybrid", "nutrition evidence mode: off, labels, recipe, or hybrid")
 	requireNutritionReady := fs.Bool("require-nutrition-ready", false, "return exit 20 when nutrition evidence does not meet requested coverage")
 	minNutritionLineCoverage := fs.Float64("min-nutrition-line-coverage", 0, "minimum nutrition ingredient-line coverage ratio from 0.0 to 1.0")
@@ -295,6 +299,10 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	}
 	auditRequested := *auditOut != "" || auditMode != food.ArtifactAuditModeOff
 	manifestRequested := *manifestOut != "" || auditRequested
+	snapshotOpts, err := foodRunSnapshotOptions(*recordLiveSnapshot, *replayLiveSnapshot, *snapshotID, *snapshotStrict)
+	if err != nil {
+		return err
+	}
 	profile, pantry, err := loadFoodPlanningInputs()
 	if err != nil {
 		return err
@@ -347,7 +355,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 			}
 		}
 	}
-	shop, client, err := shopFoodPlanWithClient(plan, profile, resolvedPolicy, *limit, *store)
+	shop, client, err := shopFoodPlanWithClient(plan, profile, resolvedPolicy, *limit, *store, snapshotOpts)
 	if err != nil {
 		return err
 	}
@@ -496,6 +504,10 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
+	if _, err := client.FinalizeLiveSnapshot(); err != nil {
+		return err
+	}
+	snapshotSummary := foodManifestSnapshotFromClient(client.LiveSnapshotSummary())
 	generationErr := readinessExitError(readinessGate, *requireSafeBasket, *requireCookReady, *requireNutritionReady)
 	generationExitCode := ExitCode(generationErr)
 	generationExitReason := readinessGate.ExitReason
@@ -519,6 +531,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 			GenerationExitCode:   generationExitCode,
 			GenerationExitReason: generationExitReason,
 			ArtifactPaths:        foodRunArtifactPaths(*planOut, *shopOut, runPath, pdfPath, *basketOut, *ledgerOut, *nutritionLedgerOut, *servingPlanOut, *scaledMealPlanOut, *pantryOut, *pantryConsumptionOut, *readinessOut, *recoveryOut, *recipeSwapOut, *basketOptimizationOut),
+			Snapshot:             snapshotSummary,
 		})
 		if err != nil {
 			return err
@@ -556,35 +569,36 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	res := struct {
-		MealPlan               food.MealPlan                `json:"mealplan"`
-		Shop                   food.ShopResult              `json:"shop"`
-		QuantityLedger         food.QuantityLedger          `json:"quantity_ledger"`
-		BasketSafety           food.BasketSafety            `json:"basket_safety"`
-		RecoveryPlan           *food.RecoveryPlan           `json:"recovery_plan,omitempty"`
-		RecipeSwapPlan         *food.RecipeSwapPlan         `json:"recipe_swap_plan,omitempty"`
-		BasketOptimizationPlan *food.BasketOptimizationPlan `json:"basket_optimization_plan,omitempty"`
-		NutritionLedger        *food.NutritionLedger        `json:"nutrition_ledger,omitempty"`
-		ServingPlan            *food.ServingPlan            `json:"serving_plan,omitempty"`
-		ScaledMealPlan         *food.ScaledMealPlan         `json:"scaled_mealplan,omitempty"`
-		PantryResolution       *food.PantryResolution       `json:"pantry_resolution,omitempty"`
-		ReadinessGate          food.ReadinessGate           `json:"readiness_gate"`
-		PDF                    string                       `json:"pdf,omitempty"`
-		Basket                 string                       `json:"basket,omitempty"`
-		Run                    string                       `json:"run,omitempty"`
-		Ledger                 string                       `json:"ledger,omitempty"`
-		Recovery               string                       `json:"recovery,omitempty"`
-		RecipeSwap             string                       `json:"recipe_swap,omitempty"`
-		BasketOptimization     string                       `json:"basket_optimization,omitempty"`
-		NutritionLedgerPath    string                       `json:"nutrition_ledger_path,omitempty"`
-		ServingPlanPath        string                       `json:"serving_plan_path,omitempty"`
-		ScaledMealPlanPath     string                       `json:"scaled_mealplan_path,omitempty"`
-		Pantry                 string                       `json:"pantry,omitempty"`
-		PantryConsumption      string                       `json:"pantry_consumption,omitempty"`
-		Readiness              string                       `json:"readiness,omitempty"`
-		Manifest               string                       `json:"manifest,omitempty"`
-		Audit                  string                       `json:"audit,omitempty"`
-		ArtifactAudit          *food.ArtifactAuditReport    `json:"artifact_audit,omitempty"`
-	}{MealPlan: plan, Shop: shop, QuantityLedger: ledger, BasketSafety: basketSafety, RecoveryPlan: artifact.RecoveryPlan, RecipeSwapPlan: artifact.RecipeSwapPlan, BasketOptimizationPlan: artifact.BasketOptimizationPlan, NutritionLedger: artifact.NutritionLedger, ServingPlan: artifact.ServingPlan, ScaledMealPlan: artifact.ScaledMealPlan, PantryResolution: artifact.PantryResolution, ReadinessGate: readinessGate, PDF: pdfPath, Basket: *basketOut, Run: runPath, Ledger: *ledgerOut, Recovery: *recoveryOut, RecipeSwap: *recipeSwapOut, BasketOptimization: *basketOptimizationOut, NutritionLedgerPath: *nutritionLedgerOut, ServingPlanPath: *servingPlanOut, ScaledMealPlanPath: *scaledMealPlanOut, Pantry: *pantryOut, PantryConsumption: *pantryConsumptionOut, Readiness: *readinessOut, Manifest: manifestPath, Audit: *auditOut, ArtifactAudit: auditReport}
+		MealPlan               food.MealPlan                 `json:"mealplan"`
+		Shop                   food.ShopResult               `json:"shop"`
+		QuantityLedger         food.QuantityLedger           `json:"quantity_ledger"`
+		BasketSafety           food.BasketSafety             `json:"basket_safety"`
+		RecoveryPlan           *food.RecoveryPlan            `json:"recovery_plan,omitempty"`
+		RecipeSwapPlan         *food.RecipeSwapPlan          `json:"recipe_swap_plan,omitempty"`
+		BasketOptimizationPlan *food.BasketOptimizationPlan  `json:"basket_optimization_plan,omitempty"`
+		NutritionLedger        *food.NutritionLedger         `json:"nutrition_ledger,omitempty"`
+		ServingPlan            *food.ServingPlan             `json:"serving_plan,omitempty"`
+		ScaledMealPlan         *food.ScaledMealPlan          `json:"scaled_mealplan,omitempty"`
+		PantryResolution       *food.PantryResolution        `json:"pantry_resolution,omitempty"`
+		ReadinessGate          food.ReadinessGate            `json:"readiness_gate"`
+		PDF                    string                        `json:"pdf,omitempty"`
+		Basket                 string                        `json:"basket,omitempty"`
+		Run                    string                        `json:"run,omitempty"`
+		Ledger                 string                        `json:"ledger,omitempty"`
+		Recovery               string                        `json:"recovery,omitempty"`
+		RecipeSwap             string                        `json:"recipe_swap,omitempty"`
+		BasketOptimization     string                        `json:"basket_optimization,omitempty"`
+		NutritionLedgerPath    string                        `json:"nutrition_ledger_path,omitempty"`
+		ServingPlanPath        string                        `json:"serving_plan_path,omitempty"`
+		ScaledMealPlanPath     string                        `json:"scaled_mealplan_path,omitempty"`
+		Pantry                 string                        `json:"pantry,omitempty"`
+		PantryConsumption      string                        `json:"pantry_consumption,omitempty"`
+		Readiness              string                        `json:"readiness,omitempty"`
+		Manifest               string                        `json:"manifest,omitempty"`
+		Audit                  string                        `json:"audit,omitempty"`
+		Snapshot               *food.ManifestSnapshotSummary `json:"snapshot,omitempty"`
+		ArtifactAudit          *food.ArtifactAuditReport     `json:"artifact_audit,omitempty"`
+	}{MealPlan: plan, Shop: shop, QuantityLedger: ledger, BasketSafety: basketSafety, RecoveryPlan: artifact.RecoveryPlan, RecipeSwapPlan: artifact.RecipeSwapPlan, BasketOptimizationPlan: artifact.BasketOptimizationPlan, NutritionLedger: artifact.NutritionLedger, ServingPlan: artifact.ServingPlan, ScaledMealPlan: artifact.ScaledMealPlan, PantryResolution: artifact.PantryResolution, ReadinessGate: readinessGate, PDF: pdfPath, Basket: *basketOut, Run: runPath, Ledger: *ledgerOut, Recovery: *recoveryOut, RecipeSwap: *recipeSwapOut, BasketOptimization: *basketOptimizationOut, NutritionLedgerPath: *nutritionLedgerOut, ServingPlanPath: *servingPlanOut, ScaledMealPlanPath: *scaledMealPlanOut, Pantry: *pantryOut, PantryConsumption: *pantryConsumptionOut, Readiness: *readinessOut, Manifest: manifestPath, Audit: *auditOut, Snapshot: snapshotSummary, ArtifactAudit: auditReport}
 	if *jsonOut {
 		if err := output.JSON(stdout, res); err != nil {
 			return err
@@ -640,6 +654,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	if manifestPath != "" {
 		fmt.Fprintf(stdout, "manifest\t%s\n", manifestPath)
 	}
+	printFoodSnapshotSummary(stdout, snapshotSummary)
 	if auditReport != nil {
 		printArtifactAudit(stdout, *auditReport)
 	}
@@ -701,11 +716,11 @@ func resolveAndSaveFoodPolicy(profile *food.Profile, explicit string, stderr io.
 }
 
 func shopFoodPlan(plan food.MealPlan, profile food.Profile, policy string, limit int, store string) (food.ShopResult, error) {
-	result, _, err := shopFoodPlanWithClient(plan, profile, policy, limit, store)
+	result, _, err := shopFoodPlanWithClient(plan, profile, policy, limit, store, nil)
 	return result, err
 }
 
-func shopFoodPlanWithClient(plan food.MealPlan, profile food.Profile, policy string, limit int, store string) (food.ShopResult, *alcampo.Client, error) {
+func shopFoodPlanWithClient(plan food.MealPlan, profile food.Profile, policy string, limit int, store string, snapshotOpts *alcampo.LiveSnapshotOptions) (food.ShopResult, *alcampo.Client, error) {
 	cfg, client, err := newClient(store)
 	if err != nil {
 		return food.ShopResult{}, nil, err
@@ -715,8 +730,30 @@ func shopFoodPlanWithClient(plan food.MealPlan, profile food.Profile, policy str
 		return food.ShopResult{}, nil, err
 	}
 	client.RegionID = regionID
+	if snapshotOpts != nil {
+		snapshotOpts.StoreID = regionID
+		snapshotOpts.StoreName = cfg.Defaults.RegionName
+		if err := client.ConfigureLiveSnapshot(*snapshotOpts); err != nil {
+			return food.ShopResult{}, nil, err
+		}
+	}
 	result, err := food.ShopMealPlan(context.Background(), client, plan, profile, food.ShopOptions{Policy: policy, Limit: limit})
 	return result, client, err
+}
+
+func foodRunSnapshotOptions(recordDir, replayDir, snapshotID string, strict bool) (*alcampo.LiveSnapshotOptions, error) {
+	recordDir = strings.TrimSpace(recordDir)
+	replayDir = strings.TrimSpace(replayDir)
+	if recordDir == "" && replayDir == "" {
+		return nil, nil
+	}
+	if recordDir != "" && replayDir != "" {
+		return nil, fmt.Errorf("--record-live-snapshot and --replay-live-snapshot cannot be used together")
+	}
+	if replayDir != "" {
+		return &alcampo.LiveSnapshotOptions{Mode: alcampo.LiveSnapshotModeReplay, Dir: replayDir, Strict: true}, nil
+	}
+	return &alcampo.LiveSnapshotOptions{Mode: alcampo.LiveSnapshotModeRecord, Dir: recordDir, SnapshotID: snapshotID, Strict: strict}, nil
 }
 
 func foodRunLedgerOptions(client *alcampo.Client, runOut, pdfOut string, enrichProducts, noProductDetailEnrichment bool, detailCacheDir string, strictQuantity, allowEstimatedVariableWeight, allowLowConfidenceBasket bool) food.QuantityLedgerOptions {

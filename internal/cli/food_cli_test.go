@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wachtermar/carrito/internal/alcampo"
 	"github.com/wachtermar/carrito/internal/food"
 )
 
@@ -1252,6 +1253,133 @@ func TestFoodRunRequireSafeBasketWritesDiagnosticArtifacts(t *testing.T) {
 	}
 }
 
+func TestFoodRunRecordAndReplayLiveSnapshot(t *testing.T) {
+	searches := map[string]int{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html></html>`))
+		case "/api/webproductpagews/v6/product-pages/search":
+			q := r.URL.Query().Get("q")
+			searches[q]++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"productGroups": []any{
+					map[string]any{"decoratedProducts": []any{
+						map[string]any{
+							"productId":         "product-" + q,
+							"retailerProductId": "sku-" + q,
+							"name":              q + " 1 kg",
+							"brand":             "TEST",
+							"size":              "1 kg",
+							"price":             map[string]any{"amount": "1.00", "currency": "EUR"},
+							"unitPrice":         map[string]any{"amount": "1.00", "currency": "EUR"},
+							"available":         true,
+						},
+					}},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	writeTestConfig(t, "region-home", "dest-home")
+	if _, err := food.SaveUserRecipes([]food.Recipe{
+		{
+			ID:          "snapshot-rice",
+			Title:       "Snapshot Rice",
+			Servings:    2,
+			Tags:        []string{"dinner", "snapshotfixture"},
+			Ingredients: []food.Ingredient{{Name: "rice", Quantity: 250, Unit: "g", SearchTerm: "arroz"}},
+			Steps:       []food.RecipeStep{{Number: 1, Text: "Cook rice."}},
+		},
+		{
+			ID:          "snapshot-milk",
+			Title:       "Snapshot Milk",
+			Servings:    2,
+			Tags:        []string{"dinner", "snapshotfixture"},
+			Ingredients: []food.Ingredient{{Name: "milk", Quantity: 1, Unit: "l", SearchTerm: "leche"}},
+			Steps:       []food.RecipeStep{{Number: 1, Text: "Pour milk."}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := food.SaveProfile(food.Profile{LikedRecipes: []string{"snapshot-rice"}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ALCAMPO_BASE_URL", server.URL)
+	outputDir := t.TempDir()
+	snapshotDir := filepath.Join(outputDir, "snapshot")
+	recordRun := filepath.Join(outputDir, "record-run.json")
+	recordManifest := filepath.Join(outputDir, "record-manifest.json")
+	recordAudit := filepath.Join(outputDir, "record-audit.json")
+	recordBasket := filepath.Join(outputDir, "record-basket.txt")
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"food", "run", "--days", "1", "--people", "2", "--meals", "dinner", "--selection-policy", "balanced", "--basket-out", recordBasket, "--run-out", recordRun, "--manifest-out", recordManifest, "--audit-out", recordAudit, "--audit-mode", "fail", "--record-live-snapshot", snapshotDir, "--snapshot-id", "cli-snapshot", "--no-product-detail-enrichment", "--require-safe-basket", "--json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("record run error: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if searches["arroz"] == 0 {
+		t.Fatalf("record run did not hit live fixture: searches=%+v", searches)
+	}
+	var recordOut struct {
+		Snapshot *food.ManifestSnapshotSummary `json:"snapshot,omitempty"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &recordOut); err != nil {
+		t.Fatalf("record output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if recordOut.Snapshot == nil || recordOut.Snapshot.Mode != alcampo.LiveSnapshotModeRecord || recordOut.Snapshot.EntryCount == 0 {
+		t.Fatalf("record output missing snapshot summary: %+v", recordOut.Snapshot)
+	}
+
+	t.Setenv("ALCAMPO_BASE_URL", "http://127.0.0.1:1")
+	replayRun := filepath.Join(outputDir, "replay-run.json")
+	replayManifest := filepath.Join(outputDir, "replay-manifest.json")
+	replayAudit := filepath.Join(outputDir, "replay-audit.json")
+	replayBasket := filepath.Join(outputDir, "replay-basket.txt")
+	stdout.Reset()
+	stderr.Reset()
+	err = Run([]string{"food", "run", "--days", "1", "--people", "2", "--meals", "dinner", "--selection-policy", "balanced", "--basket-out", replayBasket, "--run-out", replayRun, "--manifest-out", replayManifest, "--audit-out", replayAudit, "--audit-mode", "fail", "--replay-live-snapshot", snapshotDir, "--snapshot-strict", "--no-product-detail-enrichment", "--require-safe-basket", "--json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("replay run error: %v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	var replayOut struct {
+		Snapshot *food.ManifestSnapshotSummary `json:"snapshot,omitempty"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &replayOut); err != nil {
+		t.Fatalf("replay output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if replayOut.Snapshot == nil || replayOut.Snapshot.Mode != alcampo.LiveSnapshotModeReplay || replayOut.Snapshot.ReplayHits == 0 || replayOut.Snapshot.ReplayMisses != 0 {
+		t.Fatalf("unexpected replay snapshot summary: %+v", replayOut.Snapshot)
+	}
+	var recordedRun, replayedRun food.FoodRunArtifact
+	readJSONFile(t, recordRun, &recordedRun)
+	readJSONFile(t, replayRun, &replayedRun)
+	if recordedRun.ProductSelectionFingerprint != replayedRun.ProductSelectionFingerprint {
+		t.Fatalf("replay changed product selection: record=%s replay=%s", recordedRun.ProductSelectionFingerprint, replayedRun.ProductSelectionFingerprint)
+	}
+	var replayAuditReport food.ArtifactAuditReport
+	readJSONFile(t, replayAudit, &replayAuditReport)
+	if replayAuditReport.Status == food.ArtifactAuditStatusFail || replayAuditReport.Metrics.SnapshotReplayMisses != 0 {
+		t.Fatalf("replay audit should pass with zero misses: %+v", replayAuditReport)
+	}
+
+	if err := food.SaveProfile(food.Profile{LikedRecipes: []string{"snapshot-milk"}}); err != nil {
+		t.Fatal(err)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	err = Run([]string{"food", "run", "--days", "1", "--people", "2", "--meals", "dinner", "--selection-policy", "balanced", "--basket-out", filepath.Join(outputDir, "miss-basket.txt"), "--run-out", filepath.Join(outputDir, "miss-run.json"), "--replay-live-snapshot", snapshotDir, "--snapshot-strict", "--no-product-detail-enrichment", "--require-safe-basket", "--json"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected strict replay miss; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if code := ExitCode(err); code != alcampo.LiveSnapshotExitBlocked {
+		t.Fatalf("strict replay miss exit = %d, want %d; err=%v stdout=%s stderr=%s", code, alcampo.LiveSnapshotExitBlocked, err, stdout.String(), stderr.String())
+	}
+}
+
 func TestFoodRunRecipeSwapRepairsBlockedRun(t *testing.T) {
 	searches := map[string]int{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1678,5 +1806,16 @@ func TestFoodStaplesAddListRemove(t *testing.T) {
 	}
 	if len(profile.Staples) != 0 {
 		t.Fatalf("staple was not removed: %+v", profile.Staples)
+	}
+}
+
+func readJSONFile(t *testing.T, path string, out any) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		t.Fatalf("%s was not JSON: %v\n%s", path, err, string(data))
 	}
 }

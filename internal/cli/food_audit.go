@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/wachtermar/carrito/internal/alcampo"
 	"github.com/wachtermar/carrito/internal/food"
 	"github.com/wachtermar/carrito/internal/output"
 )
@@ -81,6 +82,33 @@ func printArtifactAudit(stdout io.Writer, report food.ArtifactAuditReport) {
 	if len(report.BlockingIssues) > 0 {
 		issue := report.BlockingIssues[0]
 		fmt.Fprintf(stdout, "blocking\t%s\t%s\n", issue.Code, issue.Message)
+	}
+}
+
+func printFoodSnapshotSummary(stdout io.Writer, summary *food.ManifestSnapshotSummary) {
+	if summary == nil || summary.Mode == "" {
+		return
+	}
+	fmt.Fprintf(stdout, "snapshot\tmode=%s\tentries=%d\tstrict=%t\thits=%d\tmisses=%d\n", summary.Mode, summary.EntryCount, summary.ReplayStrict, summary.ReplayHits, summary.ReplayMisses)
+	if summary.SnapshotManifestPath != "" {
+		fmt.Fprintf(stdout, "snapshot_manifest\t%s\n", summary.SnapshotManifestPath)
+	}
+}
+
+func foodManifestSnapshotFromClient(summary *alcampo.LiveSnapshotSummary) *food.ManifestSnapshotSummary {
+	if summary == nil || summary.Mode == "" {
+		return nil
+	}
+	return &food.ManifestSnapshotSummary{
+		Mode:                 summary.Mode,
+		SnapshotID:           summary.SnapshotID,
+		SnapshotDir:          summary.SnapshotDir,
+		SnapshotManifestPath: summary.SnapshotManifestPath,
+		EntryCount:           summary.EntryCount,
+		ReplayStrict:         summary.ReplayStrict,
+		SnapshotSHA256:       summary.SnapshotSHA256,
+		ReplayHits:           summary.ReplayHits,
+		ReplayMisses:         summary.ReplayMisses,
 	}
 }
 

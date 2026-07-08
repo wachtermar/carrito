@@ -50,5 +50,6 @@ OpenClaw metadata is declared under `metadata.openclaw` and uses a `kind: go` in
 - Hermes discovery: `hermes skills list`
 - Public live reads: set a known market, run search/product/batch/total.
 - Food workflows with isolated `CARRITO_CONFIG_DIR`: profile, pantry, staples, recipes, plan, shop, run, manifest, artifact audit, nutrition ledger, receive, cook, history, PDF.
+- Replayable live snapshots: record a read-only `food run` with `--record-live-snapshot`, replay it with `--replay-live-snapshot --snapshot-strict` and live network disabled, verify `manifest.snapshot.replay_misses` is zero, then corrupt one response file and confirm artifact audit fails.
 - Hermes prompt simulations: invoke `/carrito-shopping` or `--skills carrito-shopping` with shopping, weekly meal plan, diet, nutrition/macros, pantry, waste-reduction, cart-review, and guarded cart-prep requests. Verify agents report `artifact_audit.hermes_trust_summary`, `safe_to_build`, `safe_to_cook`, and `safe_to_report_nutrition` separately, and treat audit exit 30 as an untrusted bundle rather than a readiness-only diagnostic.
 - OpenClaw install simulation: `openclaw skills install git:wachtermar/carrito@main`, then invoke `/carrito-shopping` in a fresh session.

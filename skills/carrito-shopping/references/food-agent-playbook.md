@@ -33,6 +33,8 @@ Use this reference when the user asks for meal plans, recipes, pantry-aware shop
    - For full printable meal plans, use `--run-out` with `--pdf-out` so the PDF is generated from a combined `food_run` artifact containing both recipes and selected products.
    - If this exits 20, the run still produced diagnostic artifacts. Parse `run.json`, `readiness.json`, `serving_plan.json`, `scaled_mealplan.json`, `nutrition_ledger.json`, `pantry.json`, and `audit.json`; report `safe_to_build`, `safe_to_cook`, and `safe_to_report_nutrition` separately. Do not use `basket.txt` for cart preparation when `safe_to_build` is false, do not call the meal plan cook-ready when `safe_to_cook` is false, and do not call calories/macros complete when `safe_to_report_nutrition` is false.
    - If this exits 30, the artifact audit failed. Do not present the basket, PDF, cooking status, or nutrition numbers as ready; regenerate the run or rerun `carrito food validate-run --run run.json --manifest manifest.json --audit-out audit.json --mode hermes --audit-mode fail --pdf food-plan.pdf --basket basket.txt --json` after fixing files. Use `artifact_audit.hermes_trust_summary` as the final claim gate.
+   - If this exits 31, live snapshot record/replay policy failed. Treat the snapshot-backed run as blocked evidence, not as a readiness-only diagnostic; record a fresh snapshot, fix the request shape, or remove snapshot flags for a normal live user run.
+   - Use `--record-live-snapshot <dir>` and `--replay-live-snapshot <dir> --snapshot-strict` only for engineering QA, CI reproduction, or Alcampo API drift investigations. Snapshot replay is read-only, blocks mutation-like routes, and never falls back to live network.
 5. Present review output before cart mutation:
    - meal plan and recipes
    - serving assumptions, target serving units, cooked serving units, leftover policy, and scaled quantity notes
@@ -168,6 +170,7 @@ Verify before saying done:
 - Shopping output includes selected products, images when present, prices, grouped sections, reasons, alternates, and basket lines or missing-item warnings.
 - Full `food run` output includes `quantity_ledger`, `basket_safety`, and when requested `basket_optimization_plan`; incomplete or needs-review ledgers must never be summarized as ready for automatic basket creation.
 - Full `food run` output includes `manifest` and `artifact_audit` when audit flags were used; audit failure or `hermes_trust_summary.trustworthy=false` overrides favorable readiness fields until the bundle is regenerated.
+- Snapshot-backed engineering runs include `manifest.snapshot`; strict replay is valid only with `replay_misses=0`, matching snapshot manifest/response hashes, and no exit 31.
 - If `basket_optimization_plan.status` is `applied`, report product switches and caveats after the final readiness verdict. Optimization is an improvement step, not proof of readiness.
 - If `pantry_resolution` exists, report its status, assumptions, confirmed pantry lines, partial deltas, and blockers. Do not hide pantry assumptions inside generic caveats.
 - If `recovery_plan` exists, applied decisions are visible and remaining issues match the final ledger.
