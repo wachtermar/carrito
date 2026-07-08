@@ -232,6 +232,9 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	recipeSwapOut := fs.String("recipe-swap-out", "", "optional recipe swap plan JSON path")
 	basketOptimizationOut := fs.String("basket-optimization-out", "", "optional basket optimization plan JSON path")
 	nutritionLedgerOut := fs.String("nutrition-ledger-out", "", "optional nutrition evidence ledger JSON path")
+	manifestOut := fs.String("manifest-out", "", "optional food run manifest JSON path")
+	auditOut := fs.String("audit-out", "", "optional artifact audit report JSON path")
+	auditModeFlag := fs.String("audit-mode", food.ArtifactAuditModeOff, "artifact audit exit behavior: off, warn, or fail")
 	nutritionMode := fs.String("nutrition-mode", "hybrid", "nutrition evidence mode: off, labels, recipe, or hybrid")
 	requireNutritionReady := fs.Bool("require-nutrition-ready", false, "return exit 20 when nutrition evidence does not meet requested coverage")
 	minNutritionLineCoverage := fs.Float64("min-nutrition-line-coverage", 0, "minimum nutrition ingredient-line coverage ratio from 0.0 to 1.0")
@@ -286,6 +289,12 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
 		return err
 	}
+	auditMode, err := food.NormalizeArtifactAuditMode(*auditModeFlag)
+	if err != nil {
+		return err
+	}
+	auditRequested := *auditOut != "" || auditMode != food.ArtifactAuditModeOff
+	manifestRequested := *manifestOut != "" || auditRequested
 	profile, pantry, err := loadFoodPlanningInputs()
 	if err != nil {
 		return err
@@ -473,7 +482,7 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	if err := writeFoodShopOutputsWithReadiness(shop, *shopOut, *basketOut, &readinessGate, artifact.RecipeSwapPlan, artifact.BasketOptimizationPlan, artifact.PantryResolution, artifact.ServingPlan, artifact.ScaledMealPlan, artifact.NutritionLedger); err != nil {
 		return err
 	}
-	runPath, err := writeFoodRunArtifact(artifact, *runOut, *pdfOut)
+	runPath, err := writeFoodRunArtifact(artifact, *runOut, *pdfOut, manifestRequested || auditRequested)
 	if err != nil {
 		return err
 	}
@@ -485,6 +494,65 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		artifact.PDFPath = pdfPath
 		if err := writeJSONPath(runPath, artifact); err != nil {
 			return err
+		}
+	}
+	generationErr := readinessExitError(readinessGate, *requireSafeBasket, *requireCookReady, *requireNutritionReady)
+	generationExitCode := ExitCode(generationErr)
+	generationExitReason := readinessGate.ExitReason
+	if generationErr != nil {
+		generationExitReason = generationErr.Error()
+	}
+	manifestPath := *manifestOut
+	if manifestPath == "" && auditRequested {
+		manifestPath = defaultFoodRunManifestPath(runPath, *auditOut)
+	}
+	if manifestRequested {
+		if runPath == "" {
+			return errors.New("food run manifest or audit requires a run artifact; pass --run-out or --pdf-out")
+		}
+		manifest, err := food.BuildFoodRunManifest(artifact, food.FoodRunManifestOptions{
+			Command:              "carrito food run",
+			Args:                 append([]string{"food", "run"}, args...),
+			StoreID:              *store,
+			LiveMode:             true,
+			AuditMode:            auditMode,
+			GenerationExitCode:   generationExitCode,
+			GenerationExitReason: generationExitReason,
+			ArtifactPaths:        foodRunArtifactPaths(*planOut, *shopOut, runPath, pdfPath, *basketOut, *ledgerOut, *nutritionLedgerOut, *servingPlanOut, *scaledMealPlanOut, *pantryOut, *pantryConsumptionOut, *readinessOut, *recoveryOut, *recipeSwapOut, *basketOptimizationOut),
+		})
+		if err != nil {
+			return err
+		}
+		if manifestPath != "" {
+			if err := writeJSONPath(manifestPath, manifest); err != nil {
+				return err
+			}
+		}
+	}
+	var auditReport *food.ArtifactAuditReport
+	if auditRequested {
+		report, err := food.AuditFoodRunArtifacts(food.ArtifactAuditOptions{
+			Mode:         auditMode,
+			ContextMode:  "hermes",
+			ManifestPath: manifestPath,
+			RunPath:      runPath,
+			PDFPath:      pdfPath,
+			BasketPath:   *basketOut,
+		})
+		if err != nil {
+			return err
+		}
+		auditReport = &report
+		if *auditOut != "" {
+			if err := writeJSONPath(*auditOut, report); err != nil {
+				return err
+			}
+		}
+	}
+	finalErr := generationErr
+	if auditReport != nil {
+		if err := artifactAuditExitError(*auditReport, auditMode); err != nil {
+			finalErr = err
 		}
 	}
 	res := struct {
@@ -513,12 +581,15 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 		Pantry                 string                       `json:"pantry,omitempty"`
 		PantryConsumption      string                       `json:"pantry_consumption,omitempty"`
 		Readiness              string                       `json:"readiness,omitempty"`
-	}{MealPlan: plan, Shop: shop, QuantityLedger: ledger, BasketSafety: basketSafety, RecoveryPlan: artifact.RecoveryPlan, RecipeSwapPlan: artifact.RecipeSwapPlan, BasketOptimizationPlan: artifact.BasketOptimizationPlan, NutritionLedger: artifact.NutritionLedger, ServingPlan: artifact.ServingPlan, ScaledMealPlan: artifact.ScaledMealPlan, PantryResolution: artifact.PantryResolution, ReadinessGate: readinessGate, PDF: pdfPath, Basket: *basketOut, Run: runPath, Ledger: *ledgerOut, Recovery: *recoveryOut, RecipeSwap: *recipeSwapOut, BasketOptimization: *basketOptimizationOut, NutritionLedgerPath: *nutritionLedgerOut, ServingPlanPath: *servingPlanOut, ScaledMealPlanPath: *scaledMealPlanOut, Pantry: *pantryOut, PantryConsumption: *pantryConsumptionOut, Readiness: *readinessOut}
+		Manifest               string                       `json:"manifest,omitempty"`
+		Audit                  string                       `json:"audit,omitempty"`
+		ArtifactAudit          *food.ArtifactAuditReport    `json:"artifact_audit,omitempty"`
+	}{MealPlan: plan, Shop: shop, QuantityLedger: ledger, BasketSafety: basketSafety, RecoveryPlan: artifact.RecoveryPlan, RecipeSwapPlan: artifact.RecipeSwapPlan, BasketOptimizationPlan: artifact.BasketOptimizationPlan, NutritionLedger: artifact.NutritionLedger, ServingPlan: artifact.ServingPlan, ScaledMealPlan: artifact.ScaledMealPlan, PantryResolution: artifact.PantryResolution, ReadinessGate: readinessGate, PDF: pdfPath, Basket: *basketOut, Run: runPath, Ledger: *ledgerOut, Recovery: *recoveryOut, RecipeSwap: *recipeSwapOut, BasketOptimization: *basketOptimizationOut, NutritionLedgerPath: *nutritionLedgerOut, ServingPlanPath: *servingPlanOut, ScaledMealPlanPath: *scaledMealPlanOut, Pantry: *pantryOut, PantryConsumption: *pantryConsumptionOut, Readiness: *readinessOut, Manifest: manifestPath, Audit: *auditOut, ArtifactAudit: auditReport}
 	if *jsonOut {
 		if err := output.JSON(stdout, res); err != nil {
 			return err
 		}
-		return readinessExitError(readinessGate, *requireSafeBasket, *requireCookReady, *requireNutritionReady)
+		return finalErr
 	}
 	printMealPlan(stdout, plan)
 	printShopResult(stdout, shop)
@@ -566,13 +637,22 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	if *readinessOut != "" {
 		fmt.Fprintf(stdout, "readiness\t%s\n", *readinessOut)
 	}
+	if manifestPath != "" {
+		fmt.Fprintf(stdout, "manifest\t%s\n", manifestPath)
+	}
+	if auditReport != nil {
+		printArtifactAudit(stdout, *auditReport)
+	}
+	if *auditOut != "" {
+		fmt.Fprintf(stdout, "audit\t%s\n", *auditOut)
+	}
 	if pdfPath != "" {
 		fmt.Fprintf(stdout, "pdf\t%s\n", pdfPath)
 	}
 	if *basketOut != "" {
 		fmt.Fprintf(stdout, "basket\t%s\n", *basketOut)
 	}
-	return readinessExitError(readinessGate, *requireSafeBasket, *requireCookReady, *requireNutritionReady)
+	return finalErr
 }
 
 func loadFoodPlanningInputs() (food.Profile, food.Pantry, error) {
@@ -898,9 +978,9 @@ func readinessExitError(gate food.ReadinessGate, requireSafeBasket, requireCookR
 	return ExitError{Code: food.ReadinessExitBlocked, Err: fmt.Errorf("food run generated diagnostic artifacts but basket is not safe to build: %s", gate.ExitReason)}
 }
 
-func writeFoodRunArtifact(artifact food.FoodRunArtifact, runOut, pdfOut string) (string, error) {
+func writeFoodRunArtifact(artifact food.FoodRunArtifact, runOut, pdfOut string, force bool) (string, error) {
 	path := runOut
-	if path == "" && pdfOut != "" {
+	if path == "" && (pdfOut != "" || force) {
 		dir, err := food.MealPlansDir()
 		if err != nil {
 			return "", err

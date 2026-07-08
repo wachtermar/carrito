@@ -29,6 +29,8 @@ func runFood(args []string, stdout, stderr io.Writer) error {
 		return runFoodPDF(args[1:], stdout, stderr)
 	case "run":
 		return runFoodRun(args[1:], stdout, stderr)
+	case "validate-run":
+		return runFoodValidateRun(args[1:], stdout, stderr)
 	case "cook":
 		return runFoodCook(args[1:], stdout, stderr)
 	case "receive":

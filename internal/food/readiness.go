@@ -806,6 +806,9 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 				out = append(out, "# - "+warning.Message)
 			}
 		}
+		if len(lines) == 0 {
+			out = append(out, "# No Alcampo items needed; all required ingredients are covered by pantry or no purchasable products were selected.")
+		}
 		out = append(out, lines...)
 		return out
 	}

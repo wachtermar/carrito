@@ -1125,8 +1125,10 @@ func TestFoodRunRequireSafeBasketWritesDiagnosticArtifacts(t *testing.T) {
 	ledgerPath := filepath.Join(outputDir, "ledger.json")
 	readinessPath := filepath.Join(outputDir, "readiness.json")
 	recipeSwapPath := filepath.Join(outputDir, "recipe_swap.json")
+	manifestPath := filepath.Join(outputDir, "manifest.json")
+	auditPath := filepath.Join(outputDir, "audit.json")
 	var stdout, stderr bytes.Buffer
-	err := Run([]string{"food", "run", "--days", "1", "--people", "2", "--meals", "dinner", "--selection-policy", "balanced", "--basket-out", basketPath, "--run-out", runPath, "--quantity-ledger-out", ledgerPath, "--recipe-swap-out", recipeSwapPath, "--readiness-out", readinessPath, "--pdf-out", pdfPath, "--strict-quantity", "--no-recovery", "--require-safe-basket", "--json"}, &stdout, &stderr)
+	err := Run([]string{"food", "run", "--days", "1", "--people", "2", "--meals", "dinner", "--selection-policy", "balanced", "--basket-out", basketPath, "--run-out", runPath, "--quantity-ledger-out", ledgerPath, "--recipe-swap-out", recipeSwapPath, "--readiness-out", readinessPath, "--manifest-out", manifestPath, "--audit-out", auditPath, "--audit-mode", "fail", "--pdf-out", pdfPath, "--strict-quantity", "--no-recovery", "--require-safe-basket", "--json"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatalf("expected unsafe basket exit; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
@@ -1137,12 +1139,15 @@ func TestFoodRunRequireSafeBasketWritesDiagnosticArtifacts(t *testing.T) {
 		t.Fatal("fixture did not exercise missing rice product")
 	}
 	var result struct {
-		ReadinessGate food.ReadinessGate `json:"readiness_gate"`
-		Readiness     string             `json:"readiness"`
-		Run           string             `json:"run"`
-		PDF           string             `json:"pdf"`
-		Basket        string             `json:"basket"`
-		RecipeSwap    string             `json:"recipe_swap"`
+		ReadinessGate food.ReadinessGate        `json:"readiness_gate"`
+		Readiness     string                    `json:"readiness"`
+		Run           string                    `json:"run"`
+		PDF           string                    `json:"pdf"`
+		Basket        string                    `json:"basket"`
+		RecipeSwap    string                    `json:"recipe_swap"`
+		Manifest      string                    `json:"manifest"`
+		Audit         string                    `json:"audit"`
+		ArtifactAudit *food.ArtifactAuditReport `json:"artifact_audit,omitempty"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("output was not JSON despite diagnostic exit: %v\n%s", err, stdout.String())
@@ -1155,6 +1160,9 @@ func TestFoodRunRequireSafeBasketWritesDiagnosticArtifacts(t *testing.T) {
 	}
 	if result.RecipeSwap != recipeSwapPath {
 		t.Fatalf("diagnostic output missing recipe swap path: %+v", result)
+	}
+	if result.Manifest != manifestPath || result.Audit != auditPath || result.ArtifactAudit == nil || result.ArtifactAudit.Status == food.ArtifactAuditStatusFail {
+		t.Fatalf("diagnostic audit should pass while readiness returns 20: %+v", result)
 	}
 	recipeSwapData, err := os.ReadFile(recipeSwapPath)
 	if err != nil {
@@ -1210,6 +1218,37 @@ func TestFoodRunRequireSafeBasketWritesDiagnosticArtifacts(t *testing.T) {
 		if !strings.Contains(string(pdfData), want) {
 			t.Fatalf("diagnostic PDF missing %q", want)
 		}
+	}
+	auditData, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var auditReport food.ArtifactAuditReport
+	if err := json.Unmarshal(auditData, &auditReport); err != nil {
+		t.Fatalf("audit report was not JSON: %v\n%s", err, string(auditData))
+	}
+	if auditReport.Status == food.ArtifactAuditStatusFail || !auditReport.HermesTrustSummary.Trustworthy {
+		t.Fatalf("readiness-blocked diagnostic bundle should audit as trustworthy: %+v", auditReport)
+	}
+	if err := os.WriteFile(basketPath, append(basketData, []byte("rogue-sku 1 # rogue\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	validateAuditPath := filepath.Join(outputDir, "validate-audit.json")
+	stdout.Reset()
+	stderr.Reset()
+	err = Run([]string{"food", "validate-run", "--run", runPath, "--manifest", manifestPath, "--basket", basketPath, "--pdf", pdfPath, "--audit-out", validateAuditPath, "--mode", "hermes", "--audit-mode", "fail", "--json"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected validate-run audit failure after corrupt basket; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if code := ExitCode(err); code != food.ArtifactAuditExitBlocked {
+		t.Fatalf("validate-run exit code = %d, want %d; err=%v stdout=%s stderr=%s", code, food.ArtifactAuditExitBlocked, err, stdout.String(), stderr.String())
+	}
+	var validateReport food.ArtifactAuditReport
+	if jsonErr := json.Unmarshal(stdout.Bytes(), &validateReport); jsonErr != nil {
+		t.Fatalf("validate-run output was not JSON: %v\n%s", jsonErr, stdout.String())
+	}
+	if validateReport.Status != food.ArtifactAuditStatusFail || validateReport.RecommendedExitCode != food.ArtifactAuditExitBlocked {
+		t.Fatalf("validate-run audit should fail with exit recommendation: %+v", validateReport)
 	}
 }
 
