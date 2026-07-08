@@ -264,6 +264,38 @@ func printBudgetDealReport(w io.Writer, report food.BudgetDealReport) {
 	}
 }
 
+func printBudgetRepairPlan(w io.Writer, plan food.BudgetRepairPlan) {
+	fmt.Fprintf(w, "budget_repair\tstatus=%s\tinitial=%s\tfinal=%s\tdecisions=%d\n",
+		plan.Status,
+		strutil.FirstNonEmpty(plan.Baseline.BudgetStatus, food.BudgetStatusNotSet),
+		strutil.FirstNonEmpty(plan.Final.BudgetStatus, food.BudgetStatusNotSet),
+		len(plan.AppliedDecisions),
+	)
+	totalSavings := 0
+	for _, decision := range plan.AppliedDecisions {
+		if decision.EstimatedSavingsCents != nil {
+			totalSavings += *decision.EstimatedSavingsCents
+		}
+		fmt.Fprintf(w, "  repaired\t%s -> %s\n", decision.BeforeLabel, decision.AfterLabel)
+		if decision.Explanation != "" {
+			fmt.Fprintf(w, "    reason\t%s\n", decision.Explanation)
+		}
+	}
+	if totalSavings > 0 {
+		fmt.Fprintf(w, "  estimated_savings\t%s\n", money.FormatAmount(int64(totalSavings)))
+	}
+	for _, issue := range plan.BlockingIssues {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  blocking\t%s\n", issue.Message)
+		}
+	}
+	for _, issue := range plan.Warnings {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  caveat\t%s\n", issue.Message)
+		}
+	}
+}
+
 func printServingSummary(w io.Writer, plan food.ServingPlan, scaled *food.ScaledMealPlan) {
 	fmt.Fprintf(w, "serving\tstatus=%s\ttarget=%.3g\tcooked=%.3g\tscaled_slots=%d\n",
 		plan.Status,

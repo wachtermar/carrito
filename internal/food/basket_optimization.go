@@ -89,6 +89,7 @@ func OptimizeBasket(ctx context.Context, artifact FoodRunArtifact, client *alcam
 	var decisions []BasketOptimizationDecision
 	var pools []IngredientCandidatePool
 	totalChecks := 0
+	appliedSwitches := 0
 	optimizedShop := cloneShopResult(artifact.Shop)
 	for _, req := range artifact.QuantityLedger.Requirements {
 		if totalChecks >= opts.Policy.MaxTotalCandidateChecks {
@@ -97,8 +98,6 @@ func OptimizeBasket(ctx context.Context, artifact FoodRunArtifact, client *alcam
 		ingredient := ingredientForRequirement(artifact.MealPlan, req)
 		baseline, hasBaseline := selectedByIngredient[normalizeKey(req.IngredientName)]
 		pool, decision, changed := optimizeRequirement(ctx, client, opts, req, ingredient, baseline, hasBaseline, &totalChecks)
-		pools = append(pools, pool)
-		decisions = append(decisions, decision)
 		for _, candidate := range pool.Candidates {
 			if !candidate.Valid {
 				plan.RejectedCandidates = append(plan.RejectedCandidates, RejectedBasketCandidate{
@@ -111,7 +110,23 @@ func OptimizeBasket(ctx context.Context, artifact FoodRunArtifact, client *alcam
 			}
 		}
 		if changed {
+			if opts.Policy.MaxProductSwitches > 0 && appliedSwitches >= opts.Policy.MaxProductSwitches {
+				decision.Changed = false
+				decision.SelectedProductID = decision.BaselineProductID
+				decision.SelectedProductName = decision.BaselineProductName
+				decision.CostDeltaCents = 0
+				decision.OfferSavingsCents = 0
+				decision.ReadinessImpact = "preserved"
+				decision.Reason = "kept original product because the optimization switch limit was reached"
+				pool.SelectedCandidateID = firstCandidateBySource(pool.Candidates, "baseline").ID
+				changed = false
+			}
+		}
+		pools = append(pools, pool)
+		decisions = append(decisions, decision)
+		if changed {
 			optimizedShop = replaceOptimizedSelection(optimizedShop, req.IngredientName, selectedFromOptimizationCandidate(ingredient, pool.Candidates, decision.SelectedProductID))
+			appliedSwitches++
 		}
 	}
 	plan.CandidatePools = pools

@@ -104,6 +104,9 @@ func AttachBudgetDealReport(artifact FoodRunArtifact, report BudgetDealReport) F
 	if report.ShopRequirementsFingerprint == "" {
 		report.ShopRequirementsFingerprint = shopRequirementsFingerprintFromRun(&artifact)
 	}
+	if report.BudgetRepairFingerprint == "" {
+		report.BudgetRepairFingerprint = artifact.BudgetRepairFingerprint
+	}
 	report.BudgetDealFingerprint = BudgetDealFingerprint(report)
 	artifact.BudgetDealReport = &report
 	artifact.BudgetDealFingerprint = report.BudgetDealFingerprint
@@ -235,6 +238,9 @@ func RefreshFoodRunArtifact(artifact FoodRunArtifact, meals []string) FoodRunArt
 	if artifact.BudgetDealReport != nil {
 		report := BuildBudgetDealReport(artifact)
 		artifact = AttachBudgetDealReport(artifact, report)
+	}
+	if artifact.BudgetRepairPlan != nil {
+		artifact = AttachBudgetRepairPlan(artifact, *artifact.BudgetRepairPlan)
 	}
 	if artifact.PantryResolution != nil {
 		artifact.PantryResolution.MealPlanFingerprint = artifact.MealPlanFingerprint

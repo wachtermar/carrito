@@ -35,12 +35,14 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	gate.RecipeSetFingerprint = firstNonEmptyString(run.RecipeSetFingerprint, RecipeSetFingerprint(run.MealPlan))
 	gate.RecipeQualityFingerprint = run.RecipeQualityFingerprint
 	gate.RecipeImageFingerprint = run.RecipeImageFingerprint
+	gate.BudgetRepairFingerprint = run.BudgetRepairFingerprint
 	gate.BudgetDealFingerprint = run.BudgetDealFingerprint
 	gate.SafeToCook = true
 	gate.SafeToUseRecipes = true
 	gate.SafeToReportDeals = true
 	gate.CookReadinessStatus = string(ReadinessReadyExact)
 	gate.SafeToReportNutrition = false
+	gate.BudgetRepairStatus = string(BudgetRepairNotRun)
 	gate.BudgetDealStatus = string(BudgetDealNotRun)
 	gate.BudgetStatus = BudgetStatusNotSet
 	if run.PantryResolution != nil {
@@ -76,6 +78,12 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 		}
 		if gate.RecipeImageFingerprint == "" {
 			gate.RecipeImageFingerprint = run.RecipeQualityReport.RecipeImageFingerprint
+		}
+	}
+	if run.BudgetRepairPlan != nil {
+		gate.BudgetRepairStatus = string(run.BudgetRepairPlan.Status)
+		if gate.BudgetRepairFingerprint == "" {
+			gate.BudgetRepairFingerprint = run.BudgetRepairPlan.BudgetRepairFingerprint
 		}
 	}
 	if run.BudgetDealReport != nil {
@@ -166,6 +174,9 @@ func ApplyReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) ReadinessG
 		}
 		if run.BudgetDealFingerprint == "" {
 			run.BudgetDealFingerprint = gate.BudgetDealFingerprint
+		}
+		if run.BudgetRepairFingerprint == "" {
+			run.BudgetRepairFingerprint = gate.BudgetRepairFingerprint
 		}
 		run.BasketSafety.MealPlanFingerprint = gate.MealPlanFingerprint
 		run.BasketSafety.ServingPlanFingerprint = gate.ServingPlanFingerprint
@@ -1017,6 +1028,9 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 			out = append(out, "# Recipe quality: "+gate.RecipeQualityStatus)
 			out = append(out, fmt.Sprintf("# Safe to use recipes: %t", gate.SafeToUseRecipes))
 		}
+		if gate.BudgetRepairStatus != "" && gate.BudgetRepairStatus != string(BudgetRepairNotRun) {
+			out = append(out, "# Budget repair: "+gate.BudgetRepairStatus)
+		}
 		if gate.BudgetDealStatus != "" {
 			out = append(out, "# Budget/deal readiness: "+gate.BudgetDealStatus)
 			out = append(out, "# Budget status: "+firstNonEmptyString(gate.BudgetStatus, BudgetStatusNotSet))
@@ -1129,7 +1143,27 @@ func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingAndNutrition(lin
 }
 
 func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionAndBudgetDeal(lines []string, gate *ReadinessGate, swapPlan *RecipeSwapPlan, optimizationPlan *BasketOptimizationPlan, pantry *PantryResolution, serving *ServingPlan, scaled *ScaledMealPlan, nutrition *NutritionLedger, budgetDeal *BudgetDealReport) []string {
+	return ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionBudgetRepairAndBudgetDeal(lines, gate, swapPlan, optimizationPlan, pantry, serving, scaled, nutrition, nil, budgetDeal)
+}
+
+func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionBudgetRepairAndBudgetDeal(lines []string, gate *ReadinessGate, swapPlan *RecipeSwapPlan, optimizationPlan *BasketOptimizationPlan, pantry *PantryResolution, serving *ServingPlan, scaled *ScaledMealPlan, nutrition *NutritionLedger, budgetRepair *BudgetRepairPlan, budgetDeal *BudgetDealReport) []string {
 	out := ReadinessBasketLinesWithRecipeSwapAndOptimization(lines, gate, swapPlan, optimizationPlan)
+	if gate != nil && budgetRepair != nil && budgetRepair.Status != BudgetRepairNotRun {
+		repairLines := budgetRepairBasketLines(*budgetRepair)
+		if len(repairLines) > 0 {
+			insertAt := 0
+			if gate.SafeToBuild {
+				insertAt = minInt(len(out), 6)
+			} else {
+				insertAt = minInt(len(out), 3)
+			}
+			next := make([]string, 0, len(out)+len(repairLines))
+			next = append(next, out[:insertAt]...)
+			next = append(next, repairLines...)
+			next = append(next, out[insertAt:]...)
+			out = next
+		}
+	}
 	if gate != nil && budgetDeal != nil && budgetDeal.Status != BudgetDealNotRun {
 		budgetLines := budgetDealBasketLines(*budgetDeal)
 		if len(budgetLines) > 0 {
@@ -1196,6 +1230,37 @@ func ReadinessBasketLinesWithRecipeSwapOptimizationPantryServingNutritionAndBudg
 	next = append(next, pantryLines...)
 	next = append(next, out[insertAt:]...)
 	return next
+}
+
+func budgetRepairBasketLines(plan BudgetRepairPlan) []string {
+	lines := []string{
+		"# Budget repair actions: " + string(plan.Status),
+		"# Initial budget status: " + firstNonEmptyString(plan.Baseline.BudgetStatus, BudgetStatusNotSet),
+		"# Final budget status: " + firstNonEmptyString(plan.Final.BudgetStatus, BudgetStatusNotSet),
+	}
+	if len(plan.AppliedDecisions) > 0 {
+		totalSavings := 0
+		for _, decision := range plan.AppliedDecisions {
+			if decision.EstimatedSavingsCents != nil {
+				totalSavings += *decision.EstimatedSavingsCents
+			}
+		}
+		if totalSavings > 0 {
+			lines = append(lines, "# Budget repair estimated savings: "+money.Format(int64(totalSavings), "EUR"))
+		}
+		for _, decision := range plan.AppliedDecisions {
+			lines = append(lines, "# - "+decision.BeforeLabel+" -> "+decision.AfterLabel)
+		}
+	}
+	if plan.Status == BudgetRepairAttemptedFailed || plan.Status == BudgetRepairSkippedUnrepairable || plan.Status == BudgetRepairDiscardedRegression {
+		lines = append(lines, "# Budget repair caveat: no validated cheaper plan met the requested budget.")
+	}
+	for _, warning := range plan.Warnings {
+		if warning.Message != "" {
+			lines = append(lines, "# Budget repair caveat: "+warning.Message)
+		}
+	}
+	return lines
 }
 
 func budgetDealBasketLines(report BudgetDealReport) []string {
@@ -1361,7 +1426,7 @@ func formatSignedCents(cents int) string {
 }
 
 func ReadinessSummaryLine(gate ReadinessGate) string {
-	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\tbudget=%t\tbudget_status=%s\tdeals=%t\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), gate.SafeToReportBudget, firstNonEmptyString(gate.BudgetStatus, "-"), gate.SafeToReportDeals, gate.ExitCode)
+	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\tbudget_repair=%s\tbudget=%t\tbudget_status=%s\tdeals=%t\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), firstNonEmptyString(gate.BudgetRepairStatus, "-"), gate.SafeToReportBudget, firstNonEmptyString(gate.BudgetStatus, "-"), gate.SafeToReportDeals, gate.ExitCode)
 }
 
 func minInt(a, b int) int {

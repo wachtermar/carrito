@@ -206,6 +206,9 @@ func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
 	if artifact.ReadinessGate != nil {
 		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
 	}
+	if artifact.BudgetRepairPlan != nil {
+		lines = append(lines, budgetRepairPDFLines(*artifact.BudgetRepairPlan)...)
+	}
 	if artifact.BudgetDealReport != nil {
 		lines = append(lines, budgetDealPDFLines(*artifact.BudgetDealReport)...)
 	}
@@ -288,6 +291,9 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 	}
 	if gate.RecipeQualityStatus != "" {
 		lines = append(lines, "Recipe quality: "+strings.ToUpper(gate.RecipeQualityStatus), fmt.Sprintf("Safe to use recipes: %t", gate.SafeToUseRecipes))
+	}
+	if gate.BudgetRepairStatus != "" && gate.BudgetRepairStatus != string(BudgetRepairNotRun) {
+		lines = append(lines, "Budget repair: "+strings.ToUpper(gate.BudgetRepairStatus))
 	}
 	if gate.BudgetDealStatus != "" {
 		lines = append(lines, "Budget/deal readiness: "+strings.ToUpper(gate.BudgetDealStatus), "Budget status: "+strings.ToUpper(strutil.FirstNonEmpty(gate.BudgetStatus, BudgetStatusNotSet)), fmt.Sprintf("Safe to report budget: %t", gate.SafeToReportBudget), fmt.Sprintf("Safe to report deals: %t", gate.SafeToReportDeals))
@@ -373,6 +379,62 @@ func budgetDealPDFLines(report BudgetDealReport) []string {
 	for _, warning := range report.Warnings {
 		if warning.Message != "" {
 			lines = append(lines, "- Caveat: "+warning.Message)
+		}
+	}
+	return lines
+}
+
+func budgetRepairPDFLines(plan BudgetRepairPlan) []string {
+	if plan.Status == BudgetRepairNotRun {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Budget repair actions:",
+		"- Status: " + strings.ToUpper(string(plan.Status)),
+		"- Initial budget status: " + strings.ToUpper(strutil.FirstNonEmpty(plan.Baseline.BudgetStatus, BudgetStatusNotSet)),
+		"- Final budget status: " + strings.ToUpper(strutil.FirstNonEmpty(plan.Final.BudgetStatus, BudgetStatusNotSet)),
+	}
+	if plan.Baseline.EstimatedBasketSubtotalCents != nil {
+		lines = append(lines, "- Initial estimated subtotal: "+money.Format(int64(*plan.Baseline.EstimatedBasketSubtotalCents), "EUR"))
+	}
+	if plan.Final.EstimatedBasketSubtotalCents != nil {
+		lines = append(lines, "- Final estimated subtotal: "+money.Format(int64(*plan.Final.EstimatedBasketSubtotalCents), "EUR"))
+	}
+	if len(plan.AppliedDecisions) > 0 {
+		lines = append(lines, "- Changes:")
+		totalSavings := 0
+		for _, decision := range plan.AppliedDecisions {
+			savings := ""
+			if decision.EstimatedSavingsCents != nil && *decision.EstimatedSavingsCents > 0 {
+				totalSavings += *decision.EstimatedSavingsCents
+				savings = "; estimated saving " + money.Format(int64(*decision.EstimatedSavingsCents), "EUR")
+			}
+			lines = append(lines, fmt.Sprintf("  - %s -> %s%s", decision.BeforeLabel, decision.AfterLabel, savings))
+			if decision.Explanation != "" {
+				lines = append(lines, "    Reason: "+decision.Explanation)
+			}
+		}
+		if totalSavings > 0 {
+			lines = append(lines, "- Total estimated repair savings: "+money.Format(int64(totalSavings), "EUR"))
+		}
+	} else if plan.Status == BudgetRepairAttemptedFailed || plan.Status == BudgetRepairSkippedUnrepairable {
+		lines = append(lines, "- No validated cheaper product switch met the budget and readiness constraints.")
+	}
+	lines = append(lines, "- Safety: product-level budget repair may only use validated same-ingredient replacements that preserve basket readiness.")
+	if plan.Policy.AllowBudgetRecipeSwap {
+		lines = append(lines, "- Recipe budget swaps were allowed by policy, but this PDF only reports swaps recorded in the repair plan.")
+	} else {
+		lines = append(lines, "- Recipe budget swaps were not allowed; recipes were not changed solely for cost.")
+	}
+	for _, issue := range plan.BlockingIssues {
+		if issue.Message != "" {
+			lines = append(lines, "- Repair blocker: "+issue.Message)
+		}
+	}
+	for _, issue := range plan.Warnings {
+		if issue.Message != "" {
+			lines = append(lines, "- Repair caveat: "+issue.Message)
 		}
 	}
 	return lines

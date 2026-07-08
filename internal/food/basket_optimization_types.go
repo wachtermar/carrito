@@ -42,6 +42,7 @@ type BasketOptimizationPolicy struct {
 	MaxCandidatesPerIngredient     int     `json:"max_candidates_per_ingredient"`
 	MaxSearchesPerIngredient       int     `json:"max_searches_per_ingredient"`
 	MaxTotalCandidateChecks        int     `json:"max_total_candidate_checks"`
+	MaxProductSwitches             int     `json:"max_product_switches,omitempty"`
 	DealAware                      bool    `json:"deal_aware"`
 	StrictQuantity                 bool    `json:"strict_quantity"`
 	AllowEstimatedVariableWeight   bool    `json:"allow_estimated_variable_weight"`

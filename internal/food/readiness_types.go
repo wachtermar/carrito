@@ -41,6 +41,7 @@ type ReadinessGate struct {
 	RecipeSetFingerprint        string                    `json:"recipe_set_fingerprint,omitempty"`
 	RecipeQualityFingerprint    string                    `json:"recipe_quality_fingerprint,omitempty"`
 	RecipeImageFingerprint      string                    `json:"recipe_image_fingerprint,omitempty"`
+	BudgetRepairFingerprint     string                    `json:"budget_repair_fingerprint,omitempty"`
 	BudgetDealFingerprint       string                    `json:"budget_deal_fingerprint,omitempty"`
 	FinalLedgerStatus           string                    `json:"final_ledger_status,omitempty"`
 	FinalBasketSafety           bool                      `json:"final_basket_safety"`
@@ -48,6 +49,7 @@ type ReadinessGate struct {
 	CookReadinessStatus         string                    `json:"cook_readiness_status,omitempty"`
 	SafeToUseRecipes            bool                      `json:"safe_to_use_recipes"`
 	RecipeQualityStatus         string                    `json:"recipe_quality_status,omitempty"`
+	BudgetRepairStatus          string                    `json:"budget_repair_status,omitempty"`
 	BudgetDealStatus            string                    `json:"budget_deal_status,omitempty"`
 	BudgetStatus                string                    `json:"budget_status,omitempty"`
 	SafeToReportBudget          bool                      `json:"safe_to_report_budget"`

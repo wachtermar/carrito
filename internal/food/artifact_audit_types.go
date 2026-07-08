@@ -32,6 +32,7 @@ const (
 	FoodArtifactBasketOptimization = "basket_optimization"
 	FoodArtifactRecipeIntake       = "recipe_intake"
 	FoodArtifactRecipeQuality      = "recipe_quality"
+	FoodArtifactBudgetRepair       = "budget_repair"
 	FoodArtifactBudgetDeal         = "budget_deal"
 )
 
@@ -70,6 +71,7 @@ type FoodRunFingerprintSummary struct {
 	RecipeSet         string `json:"recipe_set,omitempty"`
 	RecipeQuality     string `json:"recipe_quality,omitempty"`
 	RecipeImage       string `json:"recipe_image,omitempty"`
+	BudgetRepair      string `json:"budget_repair,omitempty"`
 	BudgetDeal        string `json:"budget_deal,omitempty"`
 	PrePantryMealPlan string `json:"pre_pantry_mealplan,omitempty"`
 }
@@ -84,6 +86,7 @@ type FoodRunManifestReadiness struct {
 	SafeToReportNutrition bool   `json:"safe_to_report_nutrition"`
 	RecipeQualityStatus   string `json:"recipe_quality_status,omitempty"`
 	SafeToUseRecipes      bool   `json:"safe_to_use_recipes"`
+	BudgetRepairStatus    string `json:"budget_repair_status,omitempty"`
 	BudgetDealStatus      string `json:"budget_deal_status,omitempty"`
 	BudgetStatus          string `json:"budget_status,omitempty"`
 	SafeToReportBudget    bool   `json:"safe_to_report_budget"`
