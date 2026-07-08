@@ -1,0 +1,2205 @@
+{
+  "id": "mealplan-2026-07-07T222132Z",
+  "created_at": "2026-07-07T22:21:32Z",
+  "people": 4,
+  "days": [
+    {
+      "day": 1,
+      "label": "Day 1",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "banana-oat-pancakes",
+            "title": "Banana Oat Pancakes",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 12,
+            "tags": [
+              "breakfast",
+              "vegetarian",
+              "kid-friendly"
+            ],
+            "ingredients": [
+              {
+                "name": "banana",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "oats",
+                "quantity": 1120,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "copos de avena"
+              },
+              {
+                "name": "milk",
+                "quantity": 1600,
+                "unit": "ml",
+                "category": "dairy",
+                "search_term": "leche"
+              },
+              {
+                "name": "cinnamon",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "canela"
+              }
+            ],
+            "equipment": [
+              "blender",
+              "pan"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Blend bananas, oats, milk, and cinnamon into batter.",
+                "minutes": 5
+              },
+              {
+                "number": 2,
+                "text": "Cook small pancakes in a nonstick pan.",
+                "minutes": 10
+              },
+              {
+                "number": 3,
+                "text": "Serve with fruit or yogurt.",
+                "minutes": 2
+              }
+            ],
+            "substitutions": [
+              "Use plant milk for a dairy-free version.",
+              "Add berries to the batter."
+            ],
+            "allergen_notes": [
+              "Contains dairy unless plant milk is used. Oats may contain gluten traces."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 430,
+              "protein_g": 14,
+              "carbs_g": 78,
+              "fat_g": 8
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "arroz-cubana",
+            "title": "Arroz A La Cubana Inspired Bowl",
+            "servings": 4,
+            "prep_minutes": 8,
+            "cook_minutes": 20,
+            "tags": [
+              "spanish",
+              "kid-friendly",
+              "vegetarian",
+              "lunch"
+            ],
+            "ingredients": [
+              {
+                "name": "rice",
+                "quantity": 720,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "arroz"
+              },
+              {
+                "name": "tomato sauce",
+                "quantity": 1000,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "tomate frito"
+              },
+              {
+                "name": "banana",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "white beans",
+                "quantity": 1000,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "alubias blancas"
+              }
+            ],
+            "equipment": [
+              "pot",
+              "pan"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Cook rice until tender.",
+                "minutes": 15
+              },
+              {
+                "number": 2,
+                "text": "Warm tomato sauce and white beans.",
+                "minutes": 5
+              },
+              {
+                "number": 3,
+                "text": "Pan-sear banana halves and serve over rice with sauce.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use chickpeas instead of white beans.",
+              "Add a fried protein if desired."
+            ],
+            "allergen_notes": [
+              "No common allergens."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 600,
+              "protein_g": 18,
+              "carbs_g": 117,
+              "fat_g": 6
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "beef-vegetable-noodles",
+            "title": "Beef Vegetable Noodles",
+            "servings": 4,
+            "prep_minutes": 12,
+            "cook_minutes": 15,
+            "tags": [
+              "omnivore",
+              "international",
+              "quick",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "beef strips",
+                "quantity": 600,
+                "unit": "g",
+                "category": "meat",
+                "search_term": "ternera tiras"
+              },
+              {
+                "name": "noodles",
+                "quantity": 360,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "fideos"
+              },
+              {
+                "name": "broccoli",
+                "quantity": 400,
+                "unit": "g",
+                "category": "vegetables",
+                "search_term": "brocoli"
+              },
+              {
+                "name": "mushrooms",
+                "quantity": 400,
+                "unit": "g",
+                "category": "vegetables",
+                "search_term": "champinones"
+              },
+              {
+                "name": "soy sauce",
+                "quantity": 60,
+                "unit": "ml",
+                "category": "pantry",
+                "search_term": "salsa soja"
+              }
+            ],
+            "equipment": [
+              "wok",
+              "pot"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Cook noodles and drain.",
+                "minutes": 8
+              },
+              {
+                "number": 2,
+                "text": "Sear beef strips quickly.",
+                "minutes": 4
+              },
+              {
+                "number": 3,
+                "text": "Stir fry vegetables, return beef, and toss with noodles and soy sauce.",
+                "minutes": 7
+              }
+            ],
+            "substitutions": [
+              "Use chicken strips instead of beef.",
+              "Use rice for a gluten-free base."
+            ],
+            "allergen_notes": [
+              "Contains soy. Noodles may contain gluten."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 650,
+              "protein_g": 42,
+              "carbs_g": 72,
+              "fat_g": 20
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "label": "Day 2",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "tomato-toast-breakfast",
+            "title": "Pan Con Tomate Breakfast",
+            "servings": 4,
+            "prep_minutes": 8,
+            "cook_minutes": 4,
+            "tags": [
+              "breakfast",
+              "vegan",
+              "spanish",
+              "quick",
+              "budget"
+            ],
+            "ingredients": [
+              {
+                "name": "rustic bread",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "bakery",
+                "search_term": "pan rustico"
+              },
+              {
+                "name": "tomato",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "tomate"
+              },
+              {
+                "name": "olive oil",
+                "quantity": 80,
+                "unit": "ml",
+                "category": "pantry",
+                "search_term": "aceite de oliva"
+              },
+              {
+                "name": "orange",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "naranja"
+              }
+            ],
+            "equipment": [
+              "toaster",
+              "grater"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Toast the bread until crisp.",
+                "minutes": 4
+              },
+              {
+                "number": 2,
+                "text": "Grate tomatoes and season with olive oil and salt.",
+                "minutes": 3
+              },
+              {
+                "number": 3,
+                "text": "Spoon tomato over toast and serve with oranges.",
+                "minutes": 1
+              }
+            ],
+            "substitutions": [
+              "Use wholegrain bread for more fiber.",
+              "Add avocado when available."
+            ],
+            "allergen_notes": [
+              "Contains gluten."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 330,
+              "protein_g": 8,
+              "carbs_g": 54,
+              "fat_g": 10
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "falafel-wraps",
+            "title": "Falafel Wraps With Yogurt Sauce",
+            "servings": 4,
+            "prep_minutes": 12,
+            "cook_minutes": 12,
+            "tags": [
+              "vegetarian",
+              "international",
+              "quick",
+              "lunch"
+            ],
+            "ingredients": [
+              {
+                "name": "falafel",
+                "quantity": 1000,
+                "unit": "g",
+                "category": "plant protein",
+                "search_term": "falafel"
+              },
+              {
+                "name": "tortilla wraps",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "bakery",
+                "search_term": "tortillas trigo"
+              },
+              {
+                "name": "lettuce",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "lechuga"
+              },
+              {
+                "name": "tomato",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "tomate"
+              },
+              {
+                "name": "natural yogurt",
+                "quantity": 480,
+                "unit": "g",
+                "category": "dairy",
+                "search_term": "yogur natural"
+              }
+            ],
+            "equipment": [
+              "pan",
+              "bowl"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Warm falafel in a pan or oven.",
+                "minutes": 10
+              },
+              {
+                "number": 2,
+                "text": "Mix yogurt with lemon, salt, and pepper.",
+                "minutes": 3
+              },
+              {
+                "number": 3,
+                "text": "Fill wraps with lettuce, tomato, falafel, and sauce.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use hummus instead of yogurt sauce for a vegan wrap.",
+              "Serve over salad instead of wraps."
+            ],
+            "allergen_notes": [
+              "Wraps contain gluten. Yogurt contains dairy."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 620,
+              "protein_g": 24,
+              "carbs_g": 82,
+              "fat_g": 22
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "chicken-fajita-bowls",
+            "title": "Chicken Fajita Bowls",
+            "servings": 4,
+            "prep_minutes": 12,
+            "cook_minutes": 25,
+            "tags": [
+              "omnivore",
+              "international",
+              "batch cooking",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "chicken breast",
+                "quantity": 700,
+                "unit": "g",
+                "category": "meat",
+                "search_term": "pechuga de pollo"
+              },
+              {
+                "name": "rice",
+                "quantity": 320,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "arroz"
+              },
+              {
+                "name": "bell pepper",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "pimiento"
+              },
+              {
+                "name": "black beans",
+                "quantity": 500,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "frijoles negros"
+              },
+              {
+                "name": "corn",
+                "quantity": 300,
+                "unit": "g",
+                "category": "vegetables",
+                "search_term": "maiz"
+              }
+            ],
+            "equipment": [
+              "pan",
+              "pot"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Cook rice and warm beans.",
+                "minutes": 15
+              },
+              {
+                "number": 2,
+                "text": "Slice chicken and peppers, then saute with fajita spices.",
+                "minutes": 12
+              },
+              {
+                "number": 3,
+                "text": "Serve chicken, peppers, beans, and corn over rice.",
+                "minutes": 3
+              }
+            ],
+            "substitutions": [
+              "Use tofu for a vegetarian bowl.",
+              "Use tortillas instead of rice."
+            ],
+            "allergen_notes": [
+              "Check spice mixes for gluten traces."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 720,
+              "protein_g": 52,
+              "carbs_g": 92,
+              "fat_g": 14
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "label": "Day 3",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "yogurt-oat-breakfast",
+            "title": "Yogurt Oat Breakfast Bowl",
+            "servings": 4,
+            "prep_minutes": 8,
+            "tags": [
+              "breakfast",
+              "vegetarian",
+              "quick",
+              "kid-friendly"
+            ],
+            "ingredients": [
+              {
+                "name": "natural yogurt",
+                "quantity": 1200,
+                "unit": "g",
+                "category": "dairy",
+                "search_term": "yogur natural"
+              },
+              {
+                "name": "oats",
+                "quantity": 400,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "copos de avena"
+              },
+              {
+                "name": "banana",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "berries",
+                "quantity": 600,
+                "unit": "g",
+                "category": "fruit",
+                "search_term": "frutos rojos"
+              }
+            ],
+            "equipment": [
+              "bowls",
+              "knife"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Divide yogurt between bowls.",
+                "minutes": 2
+              },
+              {
+                "number": 2,
+                "text": "Top with oats, sliced banana, and berries.",
+                "minutes": 5
+              },
+              {
+                "number": 3,
+                "text": "Chill briefly or serve immediately.",
+                "minutes": 1
+              }
+            ],
+            "substitutions": [
+              "Use soy yogurt for a dairy-free bowl.",
+              "Use apple instead of berries."
+            ],
+            "allergen_notes": [
+              "Contains dairy unless plant yogurt is used. Oats may contain gluten traces."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 390,
+              "protein_g": 17,
+              "carbs_g": 68,
+              "fat_g": 7
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "gazpacho-chickpea-toast",
+            "title": "Gazpacho With Chickpea Toast",
+            "servings": 4,
+            "prep_minutes": 15,
+            "cook_minutes": 5,
+            "tags": [
+              "vegan",
+              "spanish",
+              "summer",
+              "quick",
+              "lunch"
+            ],
+            "ingredients": [
+              {
+                "name": "tomato",
+                "quantity": 10,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "tomate"
+              },
+              {
+                "name": "cucumber",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "pepino"
+              },
+              {
+                "name": "green pepper",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "pimiento verde"
+              },
+              {
+                "name": "chickpeas",
+                "quantity": 500,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "garbanzos cocidos"
+              },
+              {
+                "name": "bread",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "bakery",
+                "search_term": "pan"
+              }
+            ],
+            "equipment": [
+              "blender",
+              "toaster"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Blend tomatoes, cucumber, pepper, olive oil, vinegar, and salt.",
+                "minutes": 10
+              },
+              {
+                "number": 2,
+                "text": "Toast bread and crush chickpeas with lemon and oil.",
+                "minutes": 5
+              },
+              {
+                "number": 3,
+                "text": "Serve chilled gazpacho with chickpea toast.",
+                "minutes": 1
+              }
+            ],
+            "substitutions": [
+              "Use white beans instead of chickpeas.",
+              "Skip bread for a lighter lunch."
+            ],
+            "allergen_notes": [
+              "Bread contains gluten."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 410,
+              "protein_g": 15,
+              "carbs_g": 59,
+              "fat_g": 13
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "chicken-noodle-soup",
+            "title": "Chicken Noodle Soup",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 25,
+            "tags": [
+              "omnivore",
+              "kid-friendly",
+              "batch cooking",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "chicken breast",
+                "quantity": 600,
+                "unit": "g",
+                "category": "meat",
+                "search_term": "pechuga de pollo"
+              },
+              {
+                "name": "noodles",
+                "quantity": 240,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "fideos"
+              },
+              {
+                "name": "carrot",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "zanahoria"
+              },
+              {
+                "name": "celery",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "apio"
+              },
+              {
+                "name": "chicken stock",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "caldo pollo"
+              }
+            ],
+            "equipment": [
+              "pot"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Simmer chicken, carrot, celery, and stock.",
+                "minutes": 15
+              },
+              {
+                "number": 2,
+                "text": "Shred chicken and return it to the pot.",
+                "minutes": 5
+              },
+              {
+                "number": 3,
+                "text": "Add noodles and cook until tender.",
+                "minutes": 8
+              }
+            ],
+            "substitutions": [
+              "Use rice instead of noodles.",
+              "Use leftover roast chicken."
+            ],
+            "allergen_notes": [
+              "Noodles may contain gluten. Stock may contain celery."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 500,
+              "protein_g": 42,
+              "carbs_g": 54,
+              "fat_g": 10
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "label": "Day 4",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "banana-oat-pancakes",
+            "title": "Banana Oat Pancakes",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 12,
+            "tags": [
+              "breakfast",
+              "vegetarian",
+              "kid-friendly"
+            ],
+            "ingredients": [
+              {
+                "name": "banana",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "oats",
+                "quantity": 1120,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "copos de avena"
+              },
+              {
+                "name": "milk",
+                "quantity": 1600,
+                "unit": "ml",
+                "category": "dairy",
+                "search_term": "leche"
+              },
+              {
+                "name": "cinnamon",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "canela"
+              }
+            ],
+            "equipment": [
+              "blender",
+              "pan"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Blend bananas, oats, milk, and cinnamon into batter.",
+                "minutes": 5
+              },
+              {
+                "number": 2,
+                "text": "Cook small pancakes in a nonstick pan.",
+                "minutes": 10
+              },
+              {
+                "number": 3,
+                "text": "Serve with fruit or yogurt.",
+                "minutes": 2
+              }
+            ],
+            "substitutions": [
+              "Use plant milk for a dairy-free version.",
+              "Add berries to the batter."
+            ],
+            "allergen_notes": [
+              "Contains dairy unless plant milk is used. Oats may contain gluten traces."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 430,
+              "protein_g": 14,
+              "carbs_g": 78,
+              "fat_g": 8
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "quinoa-roasted-vegetables",
+            "title": "Quinoa With Roasted Vegetables",
+            "servings": 4,
+            "prep_minutes": 12,
+            "cook_minutes": 30,
+            "tags": [
+              "vegan",
+              "vegetarian",
+              "lunch",
+              "batch cooking"
+            ],
+            "ingredients": [
+              {
+                "name": "quinoa",
+                "quantity": 320,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "quinoa"
+              },
+              {
+                "name": "sweet potato",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "boniato"
+              },
+              {
+                "name": "broccoli",
+                "quantity": 500,
+                "unit": "g",
+                "category": "vegetables",
+                "search_term": "brocoli"
+              },
+              {
+                "name": "chickpeas",
+                "quantity": 500,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "garbanzos cocidos"
+              },
+              {
+                "name": "lemon",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "limon"
+              }
+            ],
+            "equipment": [
+              "oven tray",
+              "pot"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Roast diced sweet potato and broccoli.",
+                "minutes": 25
+              },
+              {
+                "number": 2,
+                "text": "Cook quinoa until fluffy.",
+                "minutes": 15
+              },
+              {
+                "number": 3,
+                "text": "Toss quinoa with vegetables, chickpeas, lemon, and olive oil.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use couscous if quinoa is unavailable.",
+              "Use carrots instead of sweet potato."
+            ],
+            "allergen_notes": [
+              "No common allergens."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 610,
+              "protein_g": 23,
+              "carbs_g": 98,
+              "fat_g": 15
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "chickpea-spinach-curry",
+            "title": "Chickpea Spinach Curry",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 25,
+            "tags": [
+              "vegan",
+              "vegetarian",
+              "international",
+              "batch cooking",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "chickpeas",
+                "quantity": 800,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "garbanzos cocidos"
+              },
+              {
+                "name": "spinach",
+                "quantity": 400,
+                "unit": "g",
+                "category": "vegetables",
+                "search_term": "espinacas"
+              },
+              {
+                "name": "coconut milk",
+                "quantity": 400,
+                "unit": "ml",
+                "category": "pantry",
+                "search_term": "leche de coco"
+              },
+              {
+                "name": "rice",
+                "quantity": 320,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "arroz"
+              },
+              {
+                "name": "curry spice",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "curry"
+              }
+            ],
+            "equipment": [
+              "pot",
+              "pan"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Cook rice according to the package.",
+                "minutes": 15
+              },
+              {
+                "number": 2,
+                "text": "Simmer chickpeas with coconut milk and curry spice.",
+                "minutes": 15
+              },
+              {
+                "number": 3,
+                "text": "Fold in spinach until wilted and serve over rice.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use lentils instead of chickpeas.",
+              "Use frozen spinach if fresh is unavailable."
+            ],
+            "allergen_notes": [
+              "Coconut is a tree nut for some allergy policies."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 690,
+              "protein_g": 24,
+              "carbs_g": 104,
+              "fat_g": 20
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "label": "Day 5",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "tomato-toast-breakfast",
+            "title": "Pan Con Tomate Breakfast",
+            "servings": 4,
+            "prep_minutes": 8,
+            "cook_minutes": 4,
+            "tags": [
+              "breakfast",
+              "vegan",
+              "spanish",
+              "quick",
+              "budget"
+            ],
+            "ingredients": [
+              {
+                "name": "rustic bread",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "bakery",
+                "search_term": "pan rustico"
+              },
+              {
+                "name": "tomato",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "tomate"
+              },
+              {
+                "name": "olive oil",
+                "quantity": 80,
+                "unit": "ml",
+                "category": "pantry",
+                "search_term": "aceite de oliva"
+              },
+              {
+                "name": "orange",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "naranja"
+              }
+            ],
+            "equipment": [
+              "toaster",
+              "grater"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Toast the bread until crisp.",
+                "minutes": 4
+              },
+              {
+                "number": 2,
+                "text": "Grate tomatoes and season with olive oil and salt.",
+                "minutes": 3
+              },
+              {
+                "number": 3,
+                "text": "Spoon tomato over toast and serve with oranges.",
+                "minutes": 1
+              }
+            ],
+            "substitutions": [
+              "Use wholegrain bread for more fiber.",
+              "Add avocado when available."
+            ],
+            "allergen_notes": [
+              "Contains gluten."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 330,
+              "protein_g": 8,
+              "carbs_g": 54,
+              "fat_g": 10
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "tuna-white-bean-salad",
+            "title": "Tuna And White Bean Salad",
+            "servings": 4,
+            "prep_minutes": 12,
+            "tags": [
+              "quick",
+              "fish",
+              "lunch",
+              "high protein"
+            ],
+            "ingredients": [
+              {
+                "name": "canned tuna",
+                "quantity": 320,
+                "unit": "g",
+                "category": "fish",
+                "search_term": "atun"
+              },
+              {
+                "name": "white beans",
+                "quantity": 800,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "alubias blancas"
+              },
+              {
+                "name": "tomato",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "tomate"
+              },
+              {
+                "name": "red onion",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "cebolla roja"
+              },
+              {
+                "name": "lettuce",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "lechuga"
+              }
+            ],
+            "equipment": [
+              "bowl",
+              "knife"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Drain tuna and beans.",
+                "minutes": 2
+              },
+              {
+                "number": 2,
+                "text": "Chop tomato, onion, and lettuce.",
+                "minutes": 7
+              },
+              {
+                "number": 3,
+                "text": "Toss everything with olive oil, vinegar, and salt.",
+                "minutes": 3
+              }
+            ],
+            "substitutions": [
+              "Use chickpeas instead of white beans.",
+              "Use canned salmon instead of tuna."
+            ],
+            "allergen_notes": [
+              "Contains fish."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 430,
+              "protein_g": 35,
+              "carbs_g": 44,
+              "fat_g": 12
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "cod-pisto",
+            "title": "Cod With Spanish Pisto",
+            "servings": 4,
+            "prep_minutes": 12,
+            "cook_minutes": 30,
+            "tags": [
+              "fish",
+              "spanish",
+              "classic",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "cod fillets",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "fish",
+                "search_term": "bacalao"
+              },
+              {
+                "name": "zucchini",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "calabacin"
+              },
+              {
+                "name": "red pepper",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "pimiento rojo"
+              },
+              {
+                "name": "tomato sauce",
+                "quantity": 500,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "tomate triturado"
+              },
+              {
+                "name": "potato",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "patata"
+              }
+            ],
+            "equipment": [
+              "pan",
+              "pot"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Dice vegetables and simmer with tomato sauce into pisto.",
+                "minutes": 20
+              },
+              {
+                "number": 2,
+                "text": "Boil or roast potatoes.",
+                "minutes": 20
+              },
+              {
+                "number": 3,
+                "text": "Cook cod gently on top of the pisto until flaky.",
+                "minutes": 8
+              }
+            ],
+            "substitutions": [
+              "Use hake instead of cod.",
+              "Serve with rice instead of potatoes."
+            ],
+            "allergen_notes": [
+              "Contains fish."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 480,
+              "protein_g": 40,
+              "carbs_g": 54,
+              "fat_g": 11
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "label": "Day 6",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "yogurt-oat-breakfast",
+            "title": "Yogurt Oat Breakfast Bowl",
+            "servings": 4,
+            "prep_minutes": 8,
+            "tags": [
+              "breakfast",
+              "vegetarian",
+              "quick",
+              "kid-friendly"
+            ],
+            "ingredients": [
+              {
+                "name": "natural yogurt",
+                "quantity": 1200,
+                "unit": "g",
+                "category": "dairy",
+                "search_term": "yogur natural"
+              },
+              {
+                "name": "oats",
+                "quantity": 400,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "copos de avena"
+              },
+              {
+                "name": "banana",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "berries",
+                "quantity": 600,
+                "unit": "g",
+                "category": "fruit",
+                "search_term": "frutos rojos"
+              }
+            ],
+            "equipment": [
+              "bowls",
+              "knife"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Divide yogurt between bowls.",
+                "minutes": 2
+              },
+              {
+                "number": 2,
+                "text": "Top with oats, sliced banana, and berries.",
+                "minutes": 5
+              },
+              {
+                "number": 3,
+                "text": "Chill briefly or serve immediately.",
+                "minutes": 1
+              }
+            ],
+            "substitutions": [
+              "Use soy yogurt for a dairy-free bowl.",
+              "Use apple instead of berries."
+            ],
+            "allergen_notes": [
+              "Contains dairy unless plant yogurt is used. Oats may contain gluten traces."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 390,
+              "protein_g": 17,
+              "carbs_g": 68,
+              "fat_g": 7
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "arroz-cubana",
+            "title": "Arroz A La Cubana Inspired Bowl",
+            "servings": 4,
+            "prep_minutes": 8,
+            "cook_minutes": 20,
+            "tags": [
+              "spanish",
+              "kid-friendly",
+              "vegetarian",
+              "lunch"
+            ],
+            "ingredients": [
+              {
+                "name": "rice",
+                "quantity": 720,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "arroz"
+              },
+              {
+                "name": "tomato sauce",
+                "quantity": 1000,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "tomate frito"
+              },
+              {
+                "name": "banana",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "white beans",
+                "quantity": 1000,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "alubias blancas"
+              }
+            ],
+            "equipment": [
+              "pot",
+              "pan"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Cook rice until tender.",
+                "minutes": 15
+              },
+              {
+                "number": 2,
+                "text": "Warm tomato sauce and white beans.",
+                "minutes": 5
+              },
+              {
+                "number": 3,
+                "text": "Pan-sear banana halves and serve over rice with sauce.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use chickpeas instead of white beans.",
+              "Add a fried protein if desired."
+            ],
+            "allergen_notes": [
+              "No common allergens."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 600,
+              "protein_g": 18,
+              "carbs_g": 117,
+              "fat_g": 6
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "hake-rice-soup",
+            "title": "Hake Rice Soup",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 25,
+            "tags": [
+              "fish",
+              "spanish",
+              "light",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "hake fillets",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "fish",
+                "search_term": "merluza"
+              },
+              {
+                "name": "rice",
+                "quantity": 240,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "arroz"
+              },
+              {
+                "name": "carrot",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "zanahoria"
+              },
+              {
+                "name": "leek",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "puerro"
+              },
+              {
+                "name": "fish stock",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "caldo pescado"
+              }
+            ],
+            "equipment": [
+              "pot"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Simmer carrot and leek in stock.",
+                "minutes": 10
+              },
+              {
+                "number": 2,
+                "text": "Add rice and cook until nearly tender.",
+                "minutes": 12
+              },
+              {
+                "number": 3,
+                "text": "Add hake pieces and simmer gently until cooked.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use cod or salmon pieces.",
+              "Use vegetable stock if fish stock is unavailable."
+            ],
+            "allergen_notes": [
+              "Contains fish."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 420,
+              "protein_g": 35,
+              "carbs_g": 54,
+              "fat_g": 6
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "label": "Day 7",
+      "meals": [
+        {
+          "type": "breakfast",
+          "recipe": {
+            "id": "banana-oat-pancakes",
+            "title": "Banana Oat Pancakes",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 12,
+            "tags": [
+              "breakfast",
+              "vegetarian",
+              "kid-friendly"
+            ],
+            "ingredients": [
+              {
+                "name": "banana",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "fruit",
+                "search_term": "platano"
+              },
+              {
+                "name": "oats",
+                "quantity": 1120,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "copos de avena"
+              },
+              {
+                "name": "milk",
+                "quantity": 1600,
+                "unit": "ml",
+                "category": "dairy",
+                "search_term": "leche"
+              },
+              {
+                "name": "cinnamon",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "canela"
+              }
+            ],
+            "equipment": [
+              "blender",
+              "pan"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Blend bananas, oats, milk, and cinnamon into batter.",
+                "minutes": 5
+              },
+              {
+                "number": 2,
+                "text": "Cook small pancakes in a nonstick pan.",
+                "minutes": 10
+              },
+              {
+                "number": 3,
+                "text": "Serve with fruit or yogurt.",
+                "minutes": 2
+              }
+            ],
+            "substitutions": [
+              "Use plant milk for a dairy-free version.",
+              "Add berries to the batter."
+            ],
+            "allergen_notes": [
+              "Contains dairy unless plant milk is used. Oats may contain gluten traces."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 430,
+              "protein_g": 14,
+              "carbs_g": 78,
+              "fat_g": 8
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "lunch",
+          "recipe": {
+            "id": "falafel-wraps",
+            "title": "Falafel Wraps With Yogurt Sauce",
+            "servings": 4,
+            "prep_minutes": 12,
+            "cook_minutes": 12,
+            "tags": [
+              "vegetarian",
+              "international",
+              "quick",
+              "lunch"
+            ],
+            "ingredients": [
+              {
+                "name": "falafel",
+                "quantity": 1000,
+                "unit": "g",
+                "category": "plant protein",
+                "search_term": "falafel"
+              },
+              {
+                "name": "tortilla wraps",
+                "quantity": 16,
+                "unit": "unit",
+                "category": "bakery",
+                "search_term": "tortillas trigo"
+              },
+              {
+                "name": "lettuce",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "lechuga"
+              },
+              {
+                "name": "tomato",
+                "quantity": 8,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "tomate"
+              },
+              {
+                "name": "natural yogurt",
+                "quantity": 480,
+                "unit": "g",
+                "category": "dairy",
+                "search_term": "yogur natural"
+              }
+            ],
+            "equipment": [
+              "pan",
+              "bowl"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "text": "Warm falafel in a pan or oven.",
+                "minutes": 10
+              },
+              {
+                "number": 2,
+                "text": "Mix yogurt with lemon, salt, and pepper.",
+                "minutes": 3
+              },
+              {
+                "number": 3,
+                "text": "Fill wraps with lettuce, tomato, falafel, and sauce.",
+                "minutes": 5
+              }
+            ],
+            "substitutions": [
+              "Use hummus instead of yogurt sauce for a vegan wrap.",
+              "Serve over salad instead of wraps."
+            ],
+            "allergen_notes": [
+              "Wraps contain gluten. Yogurt contains dairy."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 620,
+              "protein_g": 24,
+              "carbs_g": 82,
+              "fat_g": 22
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        },
+        {
+          "type": "dinner",
+          "recipe": {
+            "id": "lentil-stew",
+            "title": "Lentil And Vegetable Stew",
+            "servings": 4,
+            "prep_minutes": 10,
+            "cook_minutes": 35,
+            "tags": [
+              "vegetarian",
+              "vegan",
+              "budget",
+              "batch cooking",
+              "dinner"
+            ],
+            "ingredients": [
+              {
+                "name": "lentils",
+                "quantity": 400,
+                "unit": "g",
+                "category": "pantry",
+                "search_term": "lentejas"
+              },
+              {
+                "name": "carrot",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "zanahoria"
+              },
+              {
+                "name": "potato",
+                "quantity": 4,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "patata"
+              },
+              {
+                "name": "onion",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "vegetables",
+                "search_term": "cebolla"
+              },
+              {
+                "name": "vegetable stock",
+                "quantity": 2,
+                "unit": "unit",
+                "category": "pantry",
+                "search_term": "caldo verduras"
+              }
+            ],
+            "equipment": [
+              "soup pot",
+              "knife",
+              "ladle"
+            ],
+            "steps": [
+              {
+                "number": 1,
+                "title": "Prep vegetables",
+                "text": "Dice the onion, carrots, and potatoes.",
+                "minutes": 10
+              },
+              {
+                "number": 2,
+                "title": "Build base",
+                "text": "Saute onion, then add vegetables, lentils, stock, and water.",
+                "minutes": 10
+              },
+              {
+                "number": 3,
+                "title": "Simmer",
+                "text": "Simmer until lentils and potatoes are tender. Adjust seasoning.",
+                "minutes": 30
+              }
+            ],
+            "substitutions": [
+              "Use chickpeas when lentils are unavailable.",
+              "Add spinach at the end for extra greens."
+            ],
+            "allergen_notes": [
+              "Check stock cube labels for gluten or celery."
+            ],
+            "nutrition_per_serving": {
+              "kcal": 470,
+              "protein_g": 25,
+              "carbs_g": 78,
+              "fat_g": 6
+            }
+          },
+          "planning_reason": "fits saved profile constraints"
+        }
+      ]
+    }
+  ],
+  "budget_eur": "100",
+  "required_purchases": [
+    {
+      "name": "banana",
+      "quantity": 52,
+      "unit": "unit",
+      "category": "fruit",
+      "search_term": "platano"
+    },
+    {
+      "name": "beef strips",
+      "quantity": 600,
+      "unit": "g",
+      "category": "meat",
+      "search_term": "ternera tiras"
+    },
+    {
+      "name": "bell pepper",
+      "quantity": 4,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "pimiento"
+    },
+    {
+      "name": "berries",
+      "quantity": 900,
+      "unit": "g",
+      "category": "fruit",
+      "search_term": "frutos rojos"
+    },
+    {
+      "name": "black beans",
+      "quantity": 500,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "frijoles negros"
+    },
+    {
+      "name": "bread",
+      "quantity": 4,
+      "unit": "unit",
+      "category": "bakery",
+      "search_term": "pan"
+    },
+    {
+      "name": "broccoli",
+      "quantity": 900,
+      "unit": "g",
+      "category": "vegetables",
+      "search_term": "brocoli"
+    },
+    {
+      "name": "canned tuna",
+      "quantity": 320,
+      "unit": "g",
+      "category": "fish",
+      "search_term": "atun"
+    },
+    {
+      "name": "carrot",
+      "quantity": 12,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "zanahoria"
+    },
+    {
+      "name": "celery",
+      "quantity": 4,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "apio"
+    },
+    {
+      "name": "chicken breast",
+      "quantity": 1300,
+      "unit": "g",
+      "category": "meat",
+      "search_term": "pechuga de pollo"
+    },
+    {
+      "name": "chicken stock",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "pantry",
+      "search_term": "caldo pollo"
+    },
+    {
+      "name": "chickpeas",
+      "quantity": 1800,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "garbanzos cocidos"
+    },
+    {
+      "name": "cinnamon",
+      "quantity": 14,
+      "unit": "unit",
+      "category": "pantry",
+      "search_term": "canela"
+    },
+    {
+      "name": "coconut milk",
+      "quantity": 400,
+      "unit": "ml",
+      "category": "pantry",
+      "search_term": "leche de coco"
+    },
+    {
+      "name": "cod fillets",
+      "quantity": 4,
+      "unit": "unit",
+      "category": "fish",
+      "search_term": "bacalao"
+    },
+    {
+      "name": "corn",
+      "quantity": 300,
+      "unit": "g",
+      "category": "vegetables",
+      "search_term": "maiz"
+    },
+    {
+      "name": "cucumber",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "pepino"
+    },
+    {
+      "name": "curry spice",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "pantry",
+      "search_term": "curry"
+    },
+    {
+      "name": "falafel",
+      "quantity": 1500,
+      "unit": "g",
+      "category": "plant protein",
+      "search_term": "falafel"
+    },
+    {
+      "name": "fish stock",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "pantry",
+      "search_term": "caldo pescado"
+    },
+    {
+      "name": "green pepper",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "pimiento verde"
+    },
+    {
+      "name": "hake fillets",
+      "quantity": 4,
+      "unit": "unit",
+      "category": "fish",
+      "search_term": "merluza"
+    },
+    {
+      "name": "leek",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "puerro"
+    },
+    {
+      "name": "lemon",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "fruit",
+      "search_term": "limon"
+    },
+    {
+      "name": "lentils",
+      "quantity": 400,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "lentejas"
+    },
+    {
+      "name": "lettuce",
+      "quantity": 8,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "lechuga"
+    },
+    {
+      "name": "milk",
+      "quantity": 2800,
+      "unit": "ml",
+      "category": "dairy",
+      "search_term": "leche"
+    },
+    {
+      "name": "mushrooms",
+      "quantity": 400,
+      "unit": "g",
+      "category": "vegetables",
+      "search_term": "champinones"
+    },
+    {
+      "name": "natural yogurt",
+      "quantity": 2520,
+      "unit": "g",
+      "category": "dairy",
+      "search_term": "yogur natural"
+    },
+    {
+      "name": "noodles",
+      "quantity": 600,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "fideos"
+    },
+    {
+      "name": "oats",
+      "quantity": 2560,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "copos de avena"
+    },
+    {
+      "name": "olive oil",
+      "quantity": 120,
+      "unit": "ml",
+      "category": "pantry",
+      "search_term": "aceite de oliva"
+    },
+    {
+      "name": "onion",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "cebolla"
+    },
+    {
+      "name": "orange",
+      "quantity": 12,
+      "unit": "unit",
+      "category": "fruit",
+      "search_term": "naranja"
+    },
+    {
+      "name": "potato",
+      "quantity": 8,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "patata"
+    },
+    {
+      "name": "quinoa",
+      "quantity": 320,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "quinoa"
+    },
+    {
+      "name": "red onion",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "cebolla roja"
+    },
+    {
+      "name": "red pepper",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "pimiento rojo"
+    },
+    {
+      "name": "rice",
+      "quantity": 1960,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "arroz"
+    },
+    {
+      "name": "rustic bread",
+      "quantity": 24,
+      "unit": "unit",
+      "category": "bakery",
+      "search_term": "pan rustico"
+    },
+    {
+      "name": "soy sauce",
+      "quantity": 60,
+      "unit": "ml",
+      "category": "pantry",
+      "search_term": "salsa soja"
+    },
+    {
+      "name": "spinach",
+      "quantity": 400,
+      "unit": "g",
+      "category": "vegetables",
+      "search_term": "espinacas"
+    },
+    {
+      "name": "sweet potato",
+      "quantity": 4,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "boniato"
+    },
+    {
+      "name": "tomato",
+      "quantity": 38,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "tomate"
+    },
+    {
+      "name": "tomato sauce",
+      "quantity": 1500,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "tomate frito"
+    },
+    {
+      "name": "tomato sauce",
+      "quantity": 500,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "tomate triturado"
+    },
+    {
+      "name": "tortilla wraps",
+      "quantity": 24,
+      "unit": "unit",
+      "category": "bakery",
+      "search_term": "tortillas trigo"
+    },
+    {
+      "name": "vegetable stock",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "pantry",
+      "search_term": "caldo verduras"
+    },
+    {
+      "name": "white beans",
+      "quantity": 2300,
+      "unit": "g",
+      "category": "pantry",
+      "search_term": "alubias blancas"
+    },
+    {
+      "name": "zucchini",
+      "quantity": 2,
+      "unit": "unit",
+      "category": "vegetables",
+      "search_term": "calabacin"
+    }
+  ],
+  "notes": [
+    "No product selection policy is saved yet; set one before shopping this plan."
+  ],
+  "nutrition": {
+    "kcal": 42200,
+    "protein_g": 2036,
+    "carbs_g": 6340,
+    "fat_g": 964
+  },
+  "file": "/Users/marcelwachter/.carrito/food/mealplans/mealplan-2026-07-07T222132Z.json"
+}
