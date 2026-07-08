@@ -267,6 +267,23 @@ func validateRecipeSwapCandidate(ctx context.Context, artifact FoodRunArtifact, 
 		report.RejectReason = reason
 		return report, FoodRunArtifact{}
 	}
+	if opts.ReadinessPolicy.StrictRecipeQuality || opts.ReadinessPolicy.RequireRecipeImages {
+		policy := DefaultRecipeIntakePolicy()
+		policy.StrictRecipeQuality = opts.ReadinessPolicy.StrictRecipeQuality
+		policy.RequireRecipeImages = opts.ReadinessPolicy.RequireRecipeImages
+		source := RecipeSourceEvidence{SourceID: "swap:" + candidate.Recipe.ID, SourceType: strutil.FirstNonEmpty(candidate.Source, "catalog"), Title: candidate.Recipe.Title, Confidence: "medium", Message: "Recipe swap candidate source.", BaseServings: candidate.Recipe.Servings}
+		quality := EvaluateRecipeQuality(MealPlan{Days: []DayPlan{{Day: slot.Day, Meals: []Meal{{Type: slot.MealSlot, Recipe: candidate.Recipe}}}}}, map[string]RecipeSourceEvidence{candidate.Recipe.ID: source}, nil, policy)
+		if quality.Status == RecipeQualityFail {
+			report.Rejected = true
+			report.RejectCodes = append(report.RejectCodes, "recipe_quality_failed")
+			for _, issue := range quality.BlockingIssues {
+				report.RejectCodes = append(report.RejectCodes, issue.Code)
+			}
+			report.RejectCodes = dedupeStrings(report.RejectCodes)
+			report.RejectReason = "candidate failed strict recipe quality gate"
+			return report, FoodRunArtifact{}
+		}
+	}
 	plan := replaceRecipeInPlan(artifact.MealPlan, slot, candidate.Recipe)
 	var servingPlan ServingPlan
 	var scaledMealPlan ScaledMealPlan

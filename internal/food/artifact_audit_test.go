@@ -88,6 +88,35 @@ func TestArtifactAuditSidecarMismatchFailsEvenWhenManifestHashMatches(t *testing
 	}
 }
 
+func TestArtifactAuditRecipeQualitySidecarMismatchFails(t *testing.T) {
+	run := auditTestRun(t)
+	quality := EvaluateRecipeQuality(run.MealPlan, nil, nil, DefaultRecipeIntakePolicy())
+	intake := RecipeIntakePlan{SchemaVersion: "1", Status: RecipeIntakeComplete, Policy: DefaultRecipeIntakePolicy(), ActiveRecipeCount: len(quality.Items), RecipeSetFingerprint: quality.RecipeSetFingerprint}
+	run = AttachRecipeQuality(run, &intake, &quality)
+	gate := ApplyReadinessGate(&run, ReadinessPolicy{})
+	run.ReadinessGate = &gate
+	paths := writeAuditBundle(t, run, func(paths map[string]string, run FoodRunArtifact) {
+		changed := *run.RecipeQualityReport
+		changed.Items[0].RecipeTitle = "stale title"
+		writeAuditJSON(t, paths[FoodArtifactRecipeQuality], changed)
+	})
+
+	report, err := AuditFoodRunArtifacts(ArtifactAuditOptions{
+		Mode:         ArtifactAuditModeFail,
+		ContextMode:  "ci",
+		ManifestPath: paths["manifest"],
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != ArtifactAuditStatusFail {
+		t.Fatalf("status = %s, want fail", report.Status)
+	}
+	if !hasAuditIssue(report, "recipe_quality_matches_embedded_run") {
+		t.Fatalf("expected recipe quality sidecar mismatch, got %+v", report.BlockingIssues)
+	}
+}
+
 func TestArtifactAuditSnapshotCorruptResponseFails(t *testing.T) {
 	run := auditTestRun(t)
 	paths := writeAuditBundle(t, run, nil)
@@ -226,6 +255,14 @@ func writeAuditBundle(t *testing.T, run FoodRunArtifact, mutateBeforeManifest fu
 	}
 	writeAuditJSON(t, paths[FoodArtifactQuantityLedger], run.QuantityLedger)
 	writeAuditJSON(t, paths[FoodArtifactReadiness], run.ReadinessGate)
+	if run.RecipeIntakePlan != nil {
+		paths[FoodArtifactRecipeIntake] = filepath.Join(dir, "recipe_intake.json")
+		writeAuditJSON(t, paths[FoodArtifactRecipeIntake], run.RecipeIntakePlan)
+	}
+	if run.RecipeQualityReport != nil {
+		paths[FoodArtifactRecipeQuality] = filepath.Join(dir, "recipe_quality.json")
+		writeAuditJSON(t, paths[FoodArtifactRecipeQuality], run.RecipeQualityReport)
+	}
 	writeAuditJSON(t, paths[FoodArtifactRun], run)
 	if err := WritePDFFromJSONFile(paths[FoodArtifactRun], paths[FoodArtifactPDF]); err != nil {
 		t.Fatal(err)
@@ -241,19 +278,30 @@ func writeAuditBundle(t *testing.T, run FoodRunArtifact, mutateBeforeManifest fu
 		AuditMode:            ArtifactAuditModeFail,
 		GenerationExitCode:   expectedGenerationExitCode(*run.ReadinessGate),
 		GenerationExitReason: run.ReadinessGate.ExitReason,
-		ArtifactPaths: map[string]string{
-			FoodArtifactRun:            paths[FoodArtifactRun],
-			FoodArtifactQuantityLedger: paths[FoodArtifactQuantityLedger],
-			FoodArtifactReadiness:      paths[FoodArtifactReadiness],
-			FoodArtifactBasket:         paths[FoodArtifactBasket],
-			FoodArtifactPDF:            paths[FoodArtifactPDF],
-		},
+		ArtifactPaths:        auditBundleArtifactPaths(paths),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeAuditJSON(t, paths["manifest"], manifest)
 	return paths
+}
+
+func auditBundleArtifactPaths(paths map[string]string) map[string]string {
+	out := map[string]string{
+		FoodArtifactRun:            paths[FoodArtifactRun],
+		FoodArtifactQuantityLedger: paths[FoodArtifactQuantityLedger],
+		FoodArtifactReadiness:      paths[FoodArtifactReadiness],
+		FoodArtifactBasket:         paths[FoodArtifactBasket],
+		FoodArtifactPDF:            paths[FoodArtifactPDF],
+	}
+	if paths[FoodArtifactRecipeIntake] != "" {
+		out[FoodArtifactRecipeIntake] = paths[FoodArtifactRecipeIntake]
+	}
+	if paths[FoodArtifactRecipeQuality] != "" {
+		out[FoodArtifactRecipeQuality] = paths[FoodArtifactRecipeQuality]
+	}
+	return out
 }
 
 func writeAuditJSON(t *testing.T, path string, value any) {

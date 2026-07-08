@@ -75,7 +75,7 @@ func validateFoodAuditContextMode(mode string) error {
 
 func printArtifactAudit(stdout io.Writer, report food.ArtifactAuditReport) {
 	fmt.Fprintf(stdout, "audit\tstatus=%s\tmode=%s\trecommended_exit=%d\n", report.Status, report.Mode, report.RecommendedExitCode)
-	fmt.Fprintf(stdout, "trust\ttrustworthy=%t\tbasket=%t\tcook=%t\tnutrition=%t\n", report.HermesTrustSummary.Trustworthy, report.HermesTrustSummary.MayPresentBasketAsReady, report.HermesTrustSummary.MayPresentCookReady, report.HermesTrustSummary.MayPresentNutritionNumbers)
+	fmt.Fprintf(stdout, "trust\ttrustworthy=%t\tbasket=%t\tcook=%t\tnutrition=%t\trecipes=%t\tpdf=%t\n", report.HermesTrustSummary.Trustworthy, report.HermesTrustSummary.MayPresentBasketAsReady, report.HermesTrustSummary.MayPresentCookReady, report.HermesTrustSummary.MayPresentNutritionNumbers, report.HermesTrustSummary.MayPresentRecipesAsCookable, report.HermesTrustSummary.MayPresentPDFAsComplete)
 	if report.HermesTrustSummary.RequiredUserWarning != "" {
 		fmt.Fprintf(stdout, "warning\t%s\n", report.HermesTrustSummary.RequiredUserWarning)
 	}
@@ -137,7 +137,7 @@ func defaultFoodRunManifestPath(runPath, auditPath string) string {
 	return ""
 }
 
-func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledgerOut, nutritionLedgerOut, servingPlanOut, scaledMealPlanOut, pantryOut, pantryConsumptionOut, readinessOut, recoveryOut, recipeSwapOut, basketOptimizationOut string) map[string]string {
+func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledgerOut, nutritionLedgerOut, servingPlanOut, scaledMealPlanOut, pantryOut, pantryConsumptionOut, readinessOut, recoveryOut, recipeSwapOut, basketOptimizationOut, recipeIntakeOut, recipeQualityOut string) map[string]string {
 	paths := map[string]string{}
 	add := func(key, path string) {
 		path = strings.TrimSpace(path)
@@ -163,5 +163,7 @@ func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledger
 	add(food.FoodArtifactRecovery, recoveryOut)
 	add(food.FoodArtifactRecipeSwap, recipeSwapOut)
 	add(food.FoodArtifactBasketOptimization, basketOptimizationOut)
+	add(food.FoodArtifactRecipeIntake, recipeIntakeOut)
+	add(food.FoodArtifactRecipeQuality, recipeQualityOut)
 	return paths
 }

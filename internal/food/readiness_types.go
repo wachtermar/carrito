@@ -18,6 +18,8 @@ type ReadinessPolicy struct {
 	AllowRecipeSwap              bool `json:"allow_recipe_swap"`
 	AllowIngredientSubstitution  bool `json:"allow_ingredient_substitution"`
 	RequireNutritionReady        bool `json:"require_nutrition_ready"`
+	StrictRecipeQuality          bool `json:"strict_recipe_quality"`
+	RequireRecipeImages          bool `json:"require_recipe_images"`
 }
 
 type ReadinessGate struct {
@@ -35,10 +37,15 @@ type ReadinessGate struct {
 	PantryResolutionFingerprint string                    `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint string                    `json:"shop_requirements_fingerprint,omitempty"`
 	NutritionLedgerFingerprint  string                    `json:"nutrition_ledger_fingerprint,omitempty"`
+	RecipeSetFingerprint        string                    `json:"recipe_set_fingerprint,omitempty"`
+	RecipeQualityFingerprint    string                    `json:"recipe_quality_fingerprint,omitempty"`
+	RecipeImageFingerprint      string                    `json:"recipe_image_fingerprint,omitempty"`
 	FinalLedgerStatus           string                    `json:"final_ledger_status,omitempty"`
 	FinalBasketSafety           bool                      `json:"final_basket_safety"`
 	SafeToCook                  bool                      `json:"safe_to_cook"`
 	CookReadinessStatus         string                    `json:"cook_readiness_status,omitempty"`
+	SafeToUseRecipes            bool                      `json:"safe_to_use_recipes"`
+	RecipeQualityStatus         string                    `json:"recipe_quality_status,omitempty"`
 	NutritionStatus             string                    `json:"nutrition_status,omitempty"`
 	SafeToReportNutrition       bool                      `json:"safe_to_report_nutrition"`
 	NutritionCoverageSummary    *NutritionCoverageSummary `json:"nutrition_coverage_summary,omitempty"`

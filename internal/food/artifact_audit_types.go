@@ -30,6 +30,8 @@ const (
 	FoodArtifactRecovery           = "recovery"
 	FoodArtifactRecipeSwap         = "recipe_swap"
 	FoodArtifactBasketOptimization = "basket_optimization"
+	FoodArtifactRecipeIntake       = "recipe_intake"
+	FoodArtifactRecipeQuality      = "recipe_quality"
 )
 
 type FoodRunManifest struct {
@@ -64,6 +66,9 @@ type FoodRunFingerprintSummary struct {
 	PantryResolution  string `json:"pantry_resolution,omitempty"`
 	ShopRequirements  string `json:"shop_requirements,omitempty"`
 	NutritionLedger   string `json:"nutrition_ledger,omitempty"`
+	RecipeSet         string `json:"recipe_set,omitempty"`
+	RecipeQuality     string `json:"recipe_quality,omitempty"`
+	RecipeImage       string `json:"recipe_image,omitempty"`
 	PrePantryMealPlan string `json:"pre_pantry_mealplan,omitempty"`
 }
 
@@ -75,12 +80,16 @@ type FoodRunManifestReadiness struct {
 	SafeToCook            bool   `json:"safe_to_cook"`
 	NutritionStatus       string `json:"nutrition_status,omitempty"`
 	SafeToReportNutrition bool   `json:"safe_to_report_nutrition"`
+	RecipeQualityStatus   string `json:"recipe_quality_status,omitempty"`
+	SafeToUseRecipes      bool   `json:"safe_to_use_recipes"`
 	GenerationExitCode    int    `json:"generation_exit_code"`
 	GenerationExitReason  string `json:"generation_exit_reason,omitempty"`
 	FinalLedgerStatus     string `json:"final_ledger_status,omitempty"`
 	RequireSafeBasket     bool   `json:"require_safe_basket,omitempty"`
 	RequireCookReady      bool   `json:"require_cook_ready,omitempty"`
 	RequireNutritionReady bool   `json:"require_nutrition_ready,omitempty"`
+	StrictRecipeQuality   bool   `json:"strict_recipe_quality,omitempty"`
+	RequireRecipeImages   bool   `json:"require_recipe_images,omitempty"`
 }
 
 type FoodRunManifestOptions struct {
@@ -148,18 +157,21 @@ type ArtifactAuditSummary struct {
 	SafeToBuild             bool   `json:"safe_to_build"`
 	SafeToCook              bool   `json:"safe_to_cook"`
 	SafeToReportNutrition   bool   `json:"safe_to_report_nutrition"`
+	SafeToUseRecipes        bool   `json:"safe_to_use_recipes"`
 	BasketActionability     string `json:"basket_actionability,omitempty"`
 	PDFTrustSectionsPresent bool   `json:"pdf_trust_sections_present"`
 }
 
 type HermesTrustSummary struct {
-	Trustworthy                bool   `json:"trustworthy"`
-	MayPresentBasketAsReady    bool   `json:"may_present_basket_as_ready"`
-	MayPresentCookReady        bool   `json:"may_present_cook_ready"`
-	MayPresentNutritionNumbers bool   `json:"may_present_nutrition_numbers"`
-	RequiredUserWarning        string `json:"required_user_warning,omitempty"`
-	PrimaryFailureCode         string `json:"primary_failure_code,omitempty"`
-	PrimaryFailureMessage      string `json:"primary_failure_message,omitempty"`
+	Trustworthy                 bool   `json:"trustworthy"`
+	MayPresentBasketAsReady     bool   `json:"may_present_basket_as_ready"`
+	MayPresentCookReady         bool   `json:"may_present_cook_ready"`
+	MayPresentNutritionNumbers  bool   `json:"may_present_nutrition_numbers"`
+	MayPresentRecipesAsCookable bool   `json:"may_present_recipes_as_cookable"`
+	MayPresentPDFAsComplete     bool   `json:"may_present_pdf_as_complete"`
+	RequiredUserWarning         string `json:"required_user_warning,omitempty"`
+	PrimaryFailureCode          string `json:"primary_failure_code,omitempty"`
+	PrimaryFailureMessage       string `json:"primary_failure_message,omitempty"`
 }
 
 type ArtifactAuditMetrics struct {

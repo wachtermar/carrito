@@ -12,12 +12,14 @@ func NewFoodRunArtifact(plan MealPlan, shop ShopResult, pdfPath, basketPath stri
 	warnings := foodRunWarnings(plan, shop)
 	fingerprint := MealPlanFingerprint(plan)
 	selectionFingerprint := ProductSelectionFingerprint(shop)
+	recipeSetFingerprint := RecipeSetFingerprint(plan)
 	return FoodRunArtifact{
 		SchemaVersion:               1,
 		Kind:                        "food_run",
 		CreatedAt:                   nowStamp(),
 		MealPlanFingerprint:         fingerprint,
 		ProductSelectionFingerprint: selectionFingerprint,
+		RecipeSetFingerprint:        recipeSetFingerprint,
 		MealPlan:                    plan,
 		Shop:                        shop,
 		IngredientLinks:             foodRunIngredientLinks(plan, shop),
@@ -62,6 +64,24 @@ func AttachPantryResolution(artifact FoodRunArtifact, profile PantryProfile, res
 	artifact.PantryProfileSummary = &summary
 	artifact.PantryResolution = &resolution
 	artifact.PantryConsumptionPlan = pantryConsumptionPlan(&resolution)
+	return artifact
+}
+
+func AttachRecipeQuality(artifact FoodRunArtifact, intake *RecipeIntakePlan, report *RecipeQualityReport) FoodRunArtifact {
+	if intake != nil {
+		intakeCopy := *intake
+		artifact.RecipeIntakePlan = &intakeCopy
+	}
+	if report != nil {
+		reportCopy := *report
+		artifact.RecipeQualityReport = &reportCopy
+		artifact.RecipeSetFingerprint = reportCopy.RecipeSetFingerprint
+		artifact.RecipeQualityFingerprint = reportCopy.RecipeQualityFingerprint
+		artifact.RecipeImageFingerprint = reportCopy.RecipeImageFingerprint
+	}
+	if artifact.RecipeSetFingerprint == "" {
+		artifact.RecipeSetFingerprint = RecipeSetFingerprint(artifact.MealPlan)
+	}
 	return artifact
 }
 
@@ -175,6 +195,18 @@ func ProductSelectionFingerprint(shop ShopResult) string {
 func RefreshFoodRunArtifact(artifact FoodRunArtifact, meals []string) FoodRunArtifact {
 	artifact.MealPlanFingerprint = MealPlanFingerprint(artifact.MealPlan)
 	artifact.ProductSelectionFingerprint = ProductSelectionFingerprint(artifact.Shop)
+	artifact.RecipeSetFingerprint = RecipeSetFingerprint(artifact.MealPlan)
+	if artifact.RecipeQualityReport != nil {
+		artifact.RecipeQualityReport.RecipeSetFingerprint = artifact.RecipeSetFingerprint
+		artifact.RecipeQualityReport.RecipeImageFingerprint = RecipeImageFingerprint(*artifact.RecipeQualityReport)
+		artifact.RecipeQualityReport.RecipeQualityFingerprint = RecipeQualityFingerprint(*artifact.RecipeQualityReport)
+		artifact.RecipeQualityFingerprint = artifact.RecipeQualityReport.RecipeQualityFingerprint
+		artifact.RecipeImageFingerprint = artifact.RecipeQualityReport.RecipeImageFingerprint
+	}
+	if artifact.RecipeIntakePlan != nil {
+		artifact.RecipeIntakePlan.RecipeSetFingerprint = artifact.RecipeSetFingerprint
+		artifact.RecipeIntakePlan.ActiveRecipeCount = activeRecipeCount(artifact.MealPlan)
+	}
 	if artifact.PantryResolution != nil {
 		artifact.PantryResolution.MealPlanFingerprint = artifact.MealPlanFingerprint
 		if artifact.ServingPlanFingerprint != "" {

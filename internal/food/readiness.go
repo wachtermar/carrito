@@ -32,7 +32,11 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	gate.PantryResolutionFingerprint = firstNonEmptyString(run.PantryResolutionFingerprint, pantryResolutionFingerprintFromRun(run))
 	gate.ShopRequirementsFingerprint = firstNonEmptyString(run.ShopRequirementsFingerprint, shopRequirementsFingerprintFromRun(run))
 	gate.NutritionLedgerFingerprint = firstNonEmptyString(run.NutritionLedgerFingerprint, nutritionLedgerFingerprintFromRun(run))
+	gate.RecipeSetFingerprint = firstNonEmptyString(run.RecipeSetFingerprint, RecipeSetFingerprint(run.MealPlan))
+	gate.RecipeQualityFingerprint = run.RecipeQualityFingerprint
+	gate.RecipeImageFingerprint = run.RecipeImageFingerprint
 	gate.SafeToCook = true
+	gate.SafeToUseRecipes = true
 	gate.CookReadinessStatus = string(ReadinessReadyExact)
 	gate.SafeToReportNutrition = false
 	if run.PantryResolution != nil {
@@ -61,6 +65,15 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 		coverage := run.NutritionLedger.Coverage
 		gate.NutritionCoverageSummary = &coverage
 	}
+	if run.RecipeQualityReport != nil {
+		gate.RecipeQualityStatus = run.RecipeQualityReport.Status
+		if gate.RecipeQualityFingerprint == "" {
+			gate.RecipeQualityFingerprint = run.RecipeQualityReport.RecipeQualityFingerprint
+		}
+		if gate.RecipeImageFingerprint == "" {
+			gate.RecipeImageFingerprint = run.RecipeQualityReport.RecipeImageFingerprint
+		}
+	}
 
 	checkMealPlanFingerprints(&gate, run)
 	checkLedgerComplete(&gate, run)
@@ -71,6 +84,7 @@ func EvaluateReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) Readine
 	checkRecipeAdjustments(&gate, run)
 	checkRecipeSwapConsistency(&gate, run)
 	buildBlockingCount := len(gate.BlockingIssues)
+	checkRecipeQualityReadiness(&gate, run)
 	checkServingReadiness(&gate, run)
 	checkPantryReadiness(&gate, run)
 	checkNutritionReadiness(&gate, run)
@@ -122,6 +136,15 @@ func ApplyReadinessGate(run *FoodRunArtifact, policy ReadinessPolicy) ReadinessG
 		}
 		if run.NutritionLedgerFingerprint == "" {
 			run.NutritionLedgerFingerprint = gate.NutritionLedgerFingerprint
+		}
+		if run.RecipeSetFingerprint == "" {
+			run.RecipeSetFingerprint = gate.RecipeSetFingerprint
+		}
+		if run.RecipeQualityFingerprint == "" {
+			run.RecipeQualityFingerprint = gate.RecipeQualityFingerprint
+		}
+		if run.RecipeImageFingerprint == "" {
+			run.RecipeImageFingerprint = gate.RecipeImageFingerprint
 		}
 		run.BasketSafety.MealPlanFingerprint = gate.MealPlanFingerprint
 		run.BasketSafety.ServingPlanFingerprint = gate.ServingPlanFingerprint
@@ -233,6 +256,79 @@ func checkNutritionReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
 		if len(ledger.BlockingIssues) == 0 {
 			gate.addWarning("nutrition_not_ready", "nutrition", GateIssue{Message: "Nutrition evidence is not ready.", Remediation: "Review nutrition ledger warnings and coverage."})
 		}
+	}
+}
+
+func checkRecipeQualityReadiness(gate *ReadinessGate, run *FoodRunArtifact) {
+	if run.RecipeQualityReport == nil {
+		gate.RecipeQualityStatus = RecipeQualityNotRun
+		gate.SafeToUseRecipes = true
+		gate.addCheck("recipe_quality_not_run", true, "info", "Recipe quality evidence was not requested.")
+		return
+	}
+	report := run.RecipeQualityReport
+	gate.RecipeQualityStatus = report.Status
+	gate.RecipeSetFingerprint = firstNonEmptyString(gate.RecipeSetFingerprint, report.RecipeSetFingerprint)
+	gate.RecipeQualityFingerprint = firstNonEmptyString(gate.RecipeQualityFingerprint, report.RecipeQualityFingerprint)
+	gate.RecipeImageFingerprint = firstNonEmptyString(gate.RecipeImageFingerprint, report.RecipeImageFingerprint)
+	if report.RecipeSetFingerprint != "" {
+		expectedSet := RecipeSetFingerprint(run.MealPlan)
+		if expectedSet != "" && report.RecipeSetFingerprint != expectedSet {
+			gate.SafeToUseRecipes = false
+			gate.SafeToCook = false
+			gate.CookReadinessStatus = string(ReadinessBlocked)
+			issue := GateIssue{Message: "Recipe quality report does not match the final meal plan.", Remediation: "Regenerate recipe quality after final recipe, serving, pantry, or swap changes."}
+			if gate.Policy.RequireCookReady {
+				gate.addBlocking("stale_recipe_quality_report", "recipe_quality", issue)
+			} else {
+				gate.addWarning("stale_recipe_quality_report", "recipe_quality", issue)
+			}
+			return
+		}
+	}
+	switch report.Status {
+	case RecipeQualityPass:
+		gate.SafeToUseRecipes = true
+		gate.addCheck("recipe_quality_pass", true, "info", "Recipe quality gate passed.")
+	case RecipeQualityPassWithWarning:
+		gate.SafeToUseRecipes = true
+		gate.addCheck("recipe_quality_pass_with_warnings", true, "warning", "Recipe quality gate passed with non-blocking caveats.")
+	default:
+		gate.SafeToUseRecipes = false
+		gate.SafeToCook = false
+		gate.CookReadinessStatus = string(ReadinessBlocked)
+		if len(report.BlockingIssues) == 0 {
+			issue := GateIssue{Message: "Recipe quality gate failed.", Remediation: "Review recipe_quality_report before presenting the meal plan as cookable."}
+			if gate.Policy.RequireCookReady {
+				gate.addBlocking("recipe_quality_failed", "recipe_quality", issue)
+			} else {
+				gate.addWarning("recipe_quality_failed", "recipe_quality", issue)
+			}
+			return
+		}
+		for _, issue := range report.BlockingIssues {
+			gateIssue := gateIssueFromRecipeQualityIssue(issue)
+			if gate.Policy.RequireCookReady {
+				gate.addBlocking(firstNonEmptyString(issue.Code, "recipe_quality_failed"), "recipe_quality", gateIssue)
+			} else {
+				gate.addWarning(firstNonEmptyString(issue.Code, "recipe_quality_failed"), "recipe_quality", gateIssue)
+			}
+		}
+		for _, issue := range report.Warnings {
+			gate.addWarning(firstNonEmptyString(issue.Code, "recipe_quality_warning"), "recipe_quality", gateIssueFromRecipeQualityIssue(issue))
+		}
+	}
+}
+
+func gateIssueFromRecipeQualityIssue(issue RecipeQualityIssue) GateIssue {
+	return GateIssue{
+		RecipeID:       issue.RecipeID,
+		Day:            issue.Day,
+		MealSlot:       issue.MealSlot,
+		IngredientKey:  issue.IngredientKey,
+		IngredientName: issue.IngredientName,
+		Message:        issue.Message,
+		Remediation:    issue.Remediation,
 	}
 }
 
@@ -792,6 +888,10 @@ func ReadinessBasketLines(lines []string, gate *ReadinessGate) []string {
 			out = append(out, "# Nutrition readiness: "+gate.NutritionStatus)
 			out = append(out, fmt.Sprintf("# Safe to report nutrition: %t", gate.SafeToReportNutrition))
 		}
+		if gate.RecipeQualityStatus != "" {
+			out = append(out, "# Recipe quality: "+gate.RecipeQualityStatus)
+			out = append(out, fmt.Sprintf("# Safe to use recipes: %t", gate.SafeToUseRecipes))
+		}
 		if !gate.SafeToCook {
 			out = append(out, "# BASKET CAN BE BUILT, BUT MEAL PLAN IS NOT COOK-READY")
 			out = append(out, "# Do not rely on this basket alone for cooking.")
@@ -1071,7 +1171,7 @@ func formatSignedCents(cents int) string {
 }
 
 func ReadinessSummaryLine(gate ReadinessGate) string {
-	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.ExitCode)
+	return fmt.Sprintf("readiness\tstatus=%s\tsafe=%t\tcook=%t\tcook_status=%s\trecipes=%t\trecipe_status=%s\texit=%d", gate.Status, gate.SafeToBuild, gate.SafeToCook, firstNonEmptyString(gate.CookReadinessStatus, "-"), gate.SafeToUseRecipes, firstNonEmptyString(gate.RecipeQualityStatus, "-"), gate.ExitCode)
 }
 
 func minInt(a, b int) int {

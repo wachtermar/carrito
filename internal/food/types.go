@@ -279,6 +279,9 @@ type FoodRunArtifact struct {
 	PantryProfileFingerprint     string                   `json:"pantry_profile_fingerprint,omitempty"`
 	PantryResolutionFingerprint  string                   `json:"pantry_resolution_fingerprint,omitempty"`
 	ShopRequirementsFingerprint  string                   `json:"shop_requirements_fingerprint,omitempty"`
+	RecipeSetFingerprint         string                   `json:"recipe_set_fingerprint,omitempty"`
+	RecipeQualityFingerprint     string                   `json:"recipe_quality_fingerprint,omitempty"`
+	RecipeImageFingerprint       string                   `json:"recipe_image_fingerprint,omitempty"`
 	HouseholdProfileSummary      *HouseholdProfileSummary `json:"household_profile_summary,omitempty"`
 	ServingPlan                  *ServingPlan             `json:"serving_plan,omitempty"`
 	ScaledMealPlan               *ScaledMealPlan          `json:"scaled_mealplan,omitempty"`
@@ -288,6 +291,8 @@ type FoodRunArtifact struct {
 	PrePantryMealPlanFingerprint string                   `json:"pre_pantry_mealplan_fingerprint,omitempty"`
 	NutritionLedgerFingerprint   string                   `json:"nutrition_ledger_fingerprint,omitempty"`
 	NutritionLedger              *NutritionLedger         `json:"nutrition_ledger,omitempty"`
+	RecipeIntakePlan             *RecipeIntakePlan        `json:"recipe_intake_plan,omitempty"`
+	RecipeQualityReport          *RecipeQualityReport     `json:"recipe_quality_report,omitempty"`
 	MealPlan                     MealPlan                 `json:"mealplan"`
 	Shop                         ShopResult               `json:"shop"`
 	IngredientLinks              []FoodRunIngredientLink  `json:"ingredient_links,omitempty"`

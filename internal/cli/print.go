@@ -285,6 +285,26 @@ func printNutritionLedgerSummary(w io.Writer, ledger food.NutritionLedger) {
 	}
 }
 
+func printRecipeQualitySummary(w io.Writer, report food.RecipeQualityReport) {
+	fmt.Fprintf(w, "recipe_quality\tstatus=%s\trecipes=%d\tsourced=%d\timages=%d\tcached_images=%d\n",
+		report.Status,
+		report.Summary.RecipeCount,
+		report.Summary.RecipesWithSource,
+		report.Summary.RecipesWithImages,
+		report.Summary.CachedImages,
+	)
+	for _, issue := range report.BlockingIssues {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  blocking\t%s\n", issue.Message)
+		}
+	}
+	for _, issue := range report.Warnings {
+		if issue.Message != "" {
+			fmt.Fprintf(w, "  caveat\t%s\n", issue.Message)
+		}
+	}
+}
+
 func printBasketOptimization(w io.Writer, plan food.BasketOptimizationPlan) {
 	changed := 0
 	for _, decision := range plan.Decisions {

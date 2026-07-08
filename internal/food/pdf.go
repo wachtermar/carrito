@@ -206,6 +206,9 @@ func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
 	if artifact.ReadinessGate != nil {
 		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
 	}
+	if artifact.RecipeQualityReport != nil {
+		lines = append(lines, recipeQualityPDFLines(*artifact.RecipeQualityReport)...)
+	}
 	if artifact.NutritionLedger != nil {
 		lines = append(lines, nutritionLedgerPDFLines(*artifact.NutritionLedger)...)
 	}
@@ -280,6 +283,9 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 	if gate.NutritionStatus != "" {
 		lines = append(lines, "Nutrition readiness: "+strings.ToUpper(gate.NutritionStatus), fmt.Sprintf("Safe to report nutrition: %t", gate.SafeToReportNutrition))
 	}
+	if gate.RecipeQualityStatus != "" {
+		lines = append(lines, "Recipe quality: "+strings.ToUpper(gate.RecipeQualityStatus), fmt.Sprintf("Safe to use recipes: %t", gate.SafeToUseRecipes))
+	}
 	if !gate.SafeToBuild {
 		lines = append(lines, "Do not use this basket for shopping.")
 	}
@@ -299,6 +305,39 @@ func readinessGatePDFLines(gate ReadinessGate) []string {
 		lines = append(lines, "Readiness caveats:")
 		for _, issue := range gate.Warnings {
 			lines = append(lines, "- "+issue.Message)
+		}
+	}
+	return lines
+}
+
+func recipeQualityPDFLines(report RecipeQualityReport) []string {
+	if report.Status == RecipeQualityNotRun {
+		return nil
+	}
+	lines := []string{
+		"",
+		"Recipe sources and quality:",
+		"- Status: " + strings.ToUpper(report.Status),
+		fmt.Sprintf("- Recipes checked: %d", report.Summary.RecipeCount),
+		fmt.Sprintf("- Recipes with source: %d", report.Summary.RecipesWithSource),
+		fmt.Sprintf("- Recipe images: %d present, %d cached, %d missing, %d broken", report.Summary.RecipesWithImages, report.Summary.CachedImages, report.Summary.MissingImages, report.Summary.BrokenImages),
+	}
+	if report.RecipeQualityFingerprint != "" {
+		lines = append(lines, "- Quality fingerprint: "+report.RecipeQualityFingerprint)
+	}
+	for _, item := range report.Items {
+		source := item.Source.SourceType
+		if item.Source.Path != "" {
+			source += " " + item.Source.Path
+		} else if item.Source.URL != "" {
+			source += " " + item.Source.URL
+		}
+		lines = append(lines, fmt.Sprintf("- Day %d %s %s: %s; source=%s; image=%s", item.Day, item.MealSlot, item.RecipeTitle, strings.ToUpper(item.Status), strutil.FirstNonEmpty(source, "unknown"), strutil.FirstNonEmpty(item.ImageStatus, "not_evaluated")))
+		for _, issue := range item.Issues {
+			lines = append(lines, "  Blocking: "+issue.Message)
+		}
+		for _, issue := range item.Warnings {
+			lines = append(lines, "  Caveat: "+issue.Message)
 		}
 	}
 	return lines
