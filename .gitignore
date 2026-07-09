@@ -10,11 +10,13 @@
 *.har
 
 # Generated artifacts from manual testing / skill runs
+/output/
 *.pdf
 basket.txt
 *-shop.json
 .devspace/
 .hermes-output/
+.playwright-cli/
 .gstack/
 .tmp/
 /tmp/

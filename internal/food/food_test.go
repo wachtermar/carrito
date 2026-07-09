@@ -871,6 +871,194 @@ func TestWritePDFFromJSONFileKeepsRenderingWhenImageMissing(t *testing.T) {
 	}
 }
 
+func TestWriteHTMLFromJSONFileFoodRunArtifactCreatesMobileCookingPage(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPNG(t, filepath.Join(dir, "cover.png"))
+	writeTestPNG(t, filepath.Join(dir, "product.png"))
+	artifact := FoodRunArtifact{
+		Kind: "food_run",
+		MealPlan: MealPlan{
+			ID:              "plan-html",
+			People:          2,
+			SelectionPolicy: PolicyBalanced,
+			Days: []DayPlan{{
+				Day: 1,
+				Meals: []Meal{{
+					Type: "dinner",
+					Recipe: Recipe{
+						ID:          "test-dinner",
+						Title:       "Test Dinner",
+						Servings:    2,
+						ImageURL:    "cover.png",
+						Ingredients: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
+						Steps:       []RecipeStep{{Number: 1, Text: "Cook the rice."}},
+					},
+				}},
+			}},
+			RequiredPurchases: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
+		},
+		Shop: ShopResult{
+			Policy: PolicyBalanced,
+			SelectedProducts: []SelectedProduct{{
+				Ingredient:       Ingredient{Name: "rice", Quantity: 180, Unit: "g"},
+				Product:          ProductSummary{SKU: "rice-sku", Name: "Arroz redondo", Price: money.Money{Amount: "1.50", Currency: "EUR", Cents: 150}, ImageURL: "product.png"},
+				PurchaseQuantity: "1",
+				PackageCount:     1,
+				LineTotal:        money.Money{Amount: "1.50", Currency: "EUR", Cents: 150},
+				QuantityReason:   "calculated 1 package",
+				SelectionReason:  "balanced value policy",
+			}},
+			EstimatedTotal: money.Money{Amount: "1.50", Currency: "EUR", Cents: 150},
+			Complete:       true,
+		},
+		ReadinessGate: &ReadinessGate{
+			SafeToCook:            true,
+			SafeToBuild:           true,
+			RecipeQualityStatus:   "ready",
+			ProductEvidenceStatus: "ready",
+			NutritionStatus:       "partial",
+			BudgetStatus:          "ready",
+		},
+	}
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "run.json")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "run.html")
+	if err := WriteHTMLFromJSONFile(input, output, HTMLPageOptions{GeneratedAt: time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)}); err != nil {
+		t.Fatal(err)
+	}
+	htmlData, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(htmlData)
+	for _, want := range []string{
+		`<meta name="viewport" content="width=device-width, initial-scale=1">`,
+		`href="#day-1"`,
+		"Test Dinner",
+		"1 day",
+		"1 meal",
+		"Ingredients",
+		"Steps",
+		"Selected Alcampo products",
+		"Alcampo product photo",
+		"Evidence",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML missing %q\n%s", want, html)
+		}
+	}
+	assertHTMLOrder(t, html, "Test Dinner", "Ingredients", "Steps", "Selected Alcampo products", "Alcampo product photo")
+	if got := strings.Count(html, "data:image/png;base64,"); got < 3 {
+		t.Fatalf("HTML should embed local hero, meal, and product images; got %d data images\n%s", got, html)
+	}
+	if strings.Contains(html, "day(s)") || strings.Contains(html, "meal(s)") {
+		t.Fatalf("HTML contains unpolished plural labels\n%s", html)
+	}
+}
+
+func TestWriteHTMLFromJSONFileDoesNotUseProductImageAsDishPhoto(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPNG(t, filepath.Join(dir, "product.png"))
+	artifact := FoodRunArtifact{
+		Kind: "food_run",
+		MealPlan: MealPlan{
+			People:          2,
+			SelectionPolicy: PolicyBalanced,
+			Days: []DayPlan{{
+				Day: 1,
+				Meals: []Meal{{
+					Type: "dinner",
+					Recipe: Recipe{
+						ID:          "missing-dish-photo",
+						Title:       "Missing Dish Photo",
+						Servings:    2,
+						Ingredients: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
+						Steps:       []RecipeStep{{Number: 1, Text: "Cook the rice."}},
+					},
+				}},
+			}},
+			RequiredPurchases: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
+		},
+		Shop: ShopResult{
+			Policy: PolicyBalanced,
+			SelectedProducts: []SelectedProduct{{
+				Ingredient:       Ingredient{Name: "rice", Quantity: 180, Unit: "g"},
+				Product:          ProductSummary{Name: "Arroz redondo", ImageURL: "product.png"},
+				PurchaseQuantity: "1",
+			}},
+			Complete: true,
+		},
+	}
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "run.json")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "run.html")
+	if err := WriteHTMLFromJSONFile(input, output, HTMLPageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	htmlData, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(htmlData)
+	for _, want := range []string{
+		"Dish photo missing",
+		"Recipe photo unavailable",
+		"This page will not use product packaging as a stand-in for the dish.",
+		"Alcampo product photo",
+		"data:image/png;base64,",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML missing %q\n%s", want, html)
+		}
+	}
+	assertHTMLOrder(t, html, "Dish photo missing", "Recipe photo unavailable", "Selected Alcampo products", "data:image/png;base64,")
+}
+
+func TestWriteHTMLFromJSONFileCoverImageResolvesRelativeToWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPNG(t, filepath.Join(dir, "cover.png"))
+	t.Chdir(dir)
+	recipe := Recipe{
+		ID:          "cover-from-cwd",
+		Title:       "Cover From CWD",
+		Servings:    2,
+		Ingredients: []Ingredient{{Name: "rice", Quantity: 100, Unit: "g"}},
+		Steps:       []RecipeStep{{Number: 1, Text: "Cook rice."}},
+	}
+	data, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(dir, "recipe.json")
+	output := filepath.Join(dir, "recipe.html")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteHTMLFromJSONFile(input, output, HTMLPageOptions{CoverImageURL: "cover.png"}); err != nil {
+		t.Fatal(err)
+	}
+	htmlData, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(htmlData)
+	if !strings.Contains(html, "data:image/png;base64,") || strings.Contains(html, `src="cover.png"`) {
+		t.Fatalf("relative cover image was not embedded as a local image data URL\n%s", html)
+	}
+}
+
 func assertSectionOrder(t *testing.T, lines []string, sections ...string) {
 	t.Helper()
 	last := -1
@@ -887,6 +1075,21 @@ func assertSectionOrder(t *testing.T, lines []string, sections ...string) {
 		}
 		if pos <= last {
 			t.Fatalf("section %q out of order in %+v", section, lines)
+		}
+		last = pos
+	}
+}
+
+func assertHTMLOrder(t *testing.T, html string, values ...string) {
+	t.Helper()
+	last := -1
+	for _, value := range values {
+		pos := strings.Index(html, value)
+		if pos == -1 {
+			t.Fatalf("HTML missing %q\n%s", value, html)
+		}
+		if pos <= last {
+			t.Fatalf("HTML order mismatch: %q appeared at %d after previous position %d\n%s", value, pos, last, html)
 		}
 		last = pos
 	}

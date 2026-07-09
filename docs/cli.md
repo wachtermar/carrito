@@ -89,6 +89,7 @@ printf '2 pechugas de pollo, 1 cebolla, 200 g arroz' | ./carrito food recipes ad
 ./carrito food plan --days 3 --people 2 --meals dinner --json
 ./carrito food shop <mealplan-id-or-file> --basket-out basket.txt --json
 ./carrito food recipe "quick vegetarian pasta" --people 2 --json --out recipe.json
+./carrito food html recipe.json --out recipe.html [--cover-image path-or-url]
 ./carrito food pdf recipe.json --out recipe.pdf
 ./carrito food receive shop.json --json
 ./carrito food import-receipt --file receipt.txt --json

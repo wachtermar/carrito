@@ -205,6 +205,32 @@ func runFoodPDF(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
+func runFoodHTML(args []string, stdout, stderr io.Writer) error {
+	fs := newFlagSet("food html", stderr)
+	outPath := fs.String("out", "", "output HTML path")
+	coverImage := fs.String("cover-image", "", "optional dish image path or URL for the first recipe")
+	if err := parseInterspersed(fs, args, nil); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("food html requires a recipe, mealplan, shop, or food-run JSON file")
+	}
+	input := fs.Arg(0)
+	if *outPath == "" {
+		ext := filepath.Ext(input)
+		if ext == "" {
+			*outPath = input + ".html"
+		} else {
+			*outPath = strings.TrimSuffix(input, ext) + ".html"
+		}
+	}
+	if err := food.WriteHTMLFromJSONFile(input, *outPath, food.HTMLPageOptions{CoverImageURL: *coverImage}); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "html\t%s\n", *outPath)
+	return nil
+}
+
 func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food run", stderr)
 	days := fs.Int("days", 3, "number of days")

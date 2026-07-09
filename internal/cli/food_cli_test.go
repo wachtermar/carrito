@@ -183,6 +183,49 @@ func TestNestedHelpReturnsSuccess(t *testing.T) {
 	}
 }
 
+func TestFoodHTMLWritesMobileCookingPage(t *testing.T) {
+	recipe := food.Recipe{
+		ID:          "cli-html-recipe",
+		Title:       "CLI HTML Recipe",
+		Servings:    2,
+		Ingredients: []food.Ingredient{{Name: "rice", Quantity: 100, Unit: "g"}},
+		Steps:       []food.RecipeStep{{Number: 1, Text: "Cook rice."}},
+	}
+	data, err := json.Marshal(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	input := filepath.Join(dir, "recipe.json")
+	output := filepath.Join(dir, "recipe.html")
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "html", input, "--out", output, "--cover-image", "https://example.test/dish.jpg"}, &stdout, &stderr); err != nil {
+		t.Fatalf("html Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "html\t"+output) {
+		t.Fatalf("missing html output line: %s", stdout.String())
+	}
+	htmlData, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(htmlData)
+	for _, want := range []string{
+		`<meta name="viewport" content="width=device-width, initial-scale=1">`,
+		"CLI HTML Recipe",
+		"https://example.test/dish.jpg",
+		"Ingredients",
+		"Steps",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("HTML missing %q\n%s", want, html)
+		}
+	}
+}
+
 func TestFoodRecipesAddShowListRemove(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	recipe := food.Recipe{
