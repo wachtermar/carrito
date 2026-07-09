@@ -207,6 +207,7 @@ func TestQuantityLedgerAllocationScenarios(t *testing.T) {
 			ingredient: Ingredient{Name: "garlic", Quantity: 2, Unit: "clove"},
 			product:    ProductSummary{ID: "garlic", Name: "Ajo cabeza 100 g", Price: money.Money{Amount: "0.80", Currency: "EUR", Cents: 80}},
 			wantStatus: LedgerNeedsReview,
+			wantCount:  1,
 			wantBadge:  "LOW QUANTITY CONFIDENCE",
 		},
 		{
@@ -232,6 +233,9 @@ func TestQuantityLedgerAllocationScenarios(t *testing.T) {
 			allocation := ledger.Allocations[0]
 			if tt.wantCount > 0 && allocation.PackageCount != tt.wantCount {
 				t.Fatalf("package count = %d, want %d: %+v", allocation.PackageCount, tt.wantCount, allocation)
+			}
+			if tt.wantCount > 0 && allocation.PurchasedQuantity == nil {
+				t.Fatalf("purchased quantity missing for package count fallback: %+v", allocation)
 			}
 			if tt.wantExcess > 0 {
 				if allocation.ExcessQuantity == nil {

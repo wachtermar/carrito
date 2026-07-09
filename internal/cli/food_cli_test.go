@@ -47,6 +47,68 @@ func TestFoodProfileSetRemembersSelectionPolicy(t *testing.T) {
 	}
 }
 
+func TestFoodWriteResponsesIncludePersistedUpdatedAt(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "profile", "set", "--selection-policy", "balanced", "--people", "2", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("profile set Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var profile food.Profile
+	if err := json.Unmarshal(stdout.Bytes(), &profile); err != nil {
+		t.Fatalf("profile response was not JSON: %v\n%s", err, stdout.String())
+	}
+	persistedProfile, err := food.LoadProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.UpdatedAt == "" || profile.UpdatedAt != persistedProfile.UpdatedAt {
+		t.Fatalf("profile response updated_at=%q persisted=%q", profile.UpdatedAt, persistedProfile.UpdatedAt)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "pantry", "add", "rice", "--qty", "500", "--unit", "g", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("pantry add Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var addResp struct {
+		Action string          `json:"action"`
+		Item   food.PantryItem `json:"item"`
+		Pantry food.Pantry     `json:"pantry"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &addResp); err != nil {
+		t.Fatalf("pantry add response was not JSON: %v\n%s", err, stdout.String())
+	}
+	persistedPantry, err := food.LoadPantry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if addResp.Pantry.UpdatedAt == "" || addResp.Pantry.UpdatedAt != persistedPantry.UpdatedAt {
+		t.Fatalf("pantry add response updated_at=%q persisted=%q", addResp.Pantry.UpdatedAt, persistedPantry.UpdatedAt)
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "pantry", "use", "rice", "--qty", "100", "--unit", "g", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("pantry use Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var useResp struct {
+		Action string          `json:"action"`
+		Item   food.PantryItem `json:"item"`
+		Pantry food.Pantry     `json:"pantry"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &useResp); err != nil {
+		t.Fatalf("pantry use response was not JSON: %v\n%s", err, stdout.String())
+	}
+	persistedPantry, err = food.LoadPantry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if useResp.Pantry.UpdatedAt == "" || useResp.Pantry.UpdatedAt != persistedPantry.UpdatedAt {
+		t.Fatalf("pantry use response updated_at=%q persisted=%q", useResp.Pantry.UpdatedAt, persistedPantry.UpdatedAt)
+	}
+}
+
 func TestFoodPlanRequiresPeopleWhenProfileMissing(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	var stdout, stderr bytes.Buffer
@@ -56,6 +118,50 @@ func TestFoodPlanRequiresPeopleWhenProfileMissing(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "people count is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFoodEmptyListCommandsReturnJSONArrays(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "pantry", "list", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("pantry list error: %v stderr=%s", err, stderr.String())
+	}
+	var pantry struct {
+		Items []food.PantryItem `json:"items"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &pantry); err != nil {
+		t.Fatalf("pantry output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if pantry.Items == nil || len(pantry.Items) != 0 {
+		t.Fatalf("pantry items should be an empty array: %+v", pantry)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "staples", "list", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("staples list error: %v stderr=%s", err, stderr.String())
+	}
+	var staples []food.Staple
+	if err := json.Unmarshal(stdout.Bytes(), &staples); err != nil {
+		t.Fatalf("staples output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if staples == nil || len(staples) != 0 {
+		t.Fatalf("staples should be an empty array: %+v", staples)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "search", "definitely-no-such-recipe-qa", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("recipes search error: %v stderr=%s", err, stderr.String())
+	}
+	var recipes []food.Recipe
+	if err := json.Unmarshal(stdout.Bytes(), &recipes); err != nil {
+		t.Fatalf("recipes output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if recipes == nil || len(recipes) != 0 {
+		t.Fatalf("recipes should be an empty array: %+v", recipes)
 	}
 }
 
@@ -992,6 +1098,105 @@ func TestFoodRunServingScalingWritesArtifacts(t *testing.T) {
 	}
 }
 
+func TestFoodRunIntentCompletePDFSeesRequestedPDFPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<html></html>`))
+		case "/api/webproductpagews/v6/product-pages/search":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"productGroups": []any{
+					map[string]any{"decoratedProducts": []any{
+						map[string]any{
+							"productId":         "rice-product",
+							"retailerProductId": "rice-sku",
+							"name":              "Arroz redondo 500 g",
+							"brand":             "TEST",
+							"size":              "500 g",
+							"price":             map[string]any{"amount": "1.20", "currency": "EUR"},
+							"unitPrice":         map[string]any{"amount": "2.40", "currency": "EUR"},
+							"available":         true,
+						},
+					}},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	writeTestConfig(t, "region-home", "dest-home")
+	if _, err := food.SaveUserRecipes([]food.Recipe{{
+		ID:       "intent-pdf-rice",
+		Title:    "Intent PDF Rice",
+		Servings: 2,
+		Tags:     []string{"dinner", "intentpdffixture"},
+		Ingredients: []food.Ingredient{
+			{Name: "rice", Quantity: 250, Unit: "g", SearchTerm: "arroz"},
+		},
+		Steps: []food.RecipeStep{{Number: 1, Text: "Cook rice."}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := food.SaveProfile(food.Profile{LikedRecipes: []string{"intent-pdf-rice", "intentpdffixture"}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ALCAMPO_BASE_URL", server.URL)
+
+	outputDir := t.TempDir()
+	intentPath := filepath.Join(outputDir, "intent.json")
+	runPath := filepath.Join(outputDir, "run.json")
+	pdfPath := filepath.Join(outputDir, "run.pdf")
+	constraintPath := filepath.Join(outputDir, "constraint.json")
+	basketPath := filepath.Join(outputDir, "basket.txt")
+	intent := food.MealRunIntent{
+		SchemaVersion: "1",
+		Source:        "test",
+		RecipePDF:     &food.RecipePDFIntent{RequireCookingSteps: true, RequireCompletePDF: true},
+		ClaimPolicy: food.IntentClaimPolicy{
+			RequireAllHardConstraints:  true,
+			UnknownHardConstraintFails: true,
+			AllowSoftPreferenceMisses:  true,
+		},
+	}
+	intentData, err := json.Marshal(intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(intentPath, intentData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = Run([]string{"food", "run", "--days", "1", "--people", "2", "--meals", "dinner", "--selection-policy", "balanced", "--basket-out", basketPath, "--run-out", runPath, "--pdf-out", pdfPath, "--intent-file", intentPath, "--constraint-report-out", constraintPath, "--strict-quantity", "--require-safe-basket", "--require-cook-ready", "--require-intent-ready", "--json"}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var result struct {
+		PDF                          string                             `json:"pdf"`
+		ConstraintSatisfactionReport *food.ConstraintSatisfactionReport `json:"constraint_satisfaction_report,omitempty"`
+		ReadinessGate                food.ReadinessGate                 `json:"readiness_gate"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if result.PDF != pdfPath || result.ConstraintSatisfactionReport == nil || !result.ConstraintSatisfactionReport.ClaimGuard.MayClaimRequestSatisfied || !result.ReadinessGate.SafeToSatisfyIntent {
+		t.Fatalf("PDF intent should be satisfied: %+v", result)
+	}
+	var artifact food.FoodRunArtifact
+	readJSONFile(t, runPath, &artifact)
+	if artifact.PDFPath != pdfPath {
+		t.Fatalf("run artifact PDF path = %q, want %q", artifact.PDFPath, pdfPath)
+	}
+	var report food.ConstraintSatisfactionReport
+	readJSONFile(t, constraintPath, &report)
+	if report.Status != food.ConstraintSatisfactionPass || !report.ClaimGuard.MayClaimPDFComplete {
+		t.Fatalf("constraint report should pass PDF completeness: %+v", report)
+	}
+}
+
 func TestFoodRunRequireNutritionReadyKeepsSafeBasket(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1603,6 +1808,9 @@ func TestFoodCookUpdatesPantryAndHistory(t *testing.T) {
 	if len(pantry.Items) != 1 || pantry.Items[0].Quantity != 20 {
 		t.Fatalf("pantry not updated: %+v", pantry)
 	}
+	if result.Pantry.UpdatedAt == "" || result.Pantry.UpdatedAt != pantry.UpdatedAt {
+		t.Fatalf("cook response pantry updated_at=%q persisted=%q", result.Pantry.UpdatedAt, pantry.UpdatedAt)
+	}
 	historyPath, err := food.HistoryPath()
 	if err != nil {
 		t.Fatal(err)
@@ -1760,6 +1968,9 @@ func TestFoodReceiveImportsRunShopIntoPantryAndHistory(t *testing.T) {
 	}
 	if len(pantry.Items) != 1 || pantry.Items[0].Name != "milk" || pantry.Items[0].Location != "fridge" {
 		t.Fatalf("pantry not updated from receive: %+v", pantry)
+	}
+	if result.Pantry.UpdatedAt == "" || result.Pantry.UpdatedAt != pantry.UpdatedAt {
+		t.Fatalf("receive response pantry updated_at=%q persisted=%q", result.Pantry.UpdatedAt, pantry.UpdatedAt)
 	}
 	history, err := food.LoadHistory(10)
 	if err != nil {

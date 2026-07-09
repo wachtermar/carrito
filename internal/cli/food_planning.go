@@ -573,7 +573,11 @@ func runFoodRun(args []string, stdout, stderr io.Writer) error {
 	}
 	if mealRunIntent != nil {
 		artifact = food.AttachMealRunIntent(artifact, *mealRunIntent)
-		constraintReport := food.BuildConstraintSatisfactionReport(artifact, *artifact.MealRunIntent)
+		constraintArtifact := artifact
+		if strings.TrimSpace(constraintArtifact.PDFPath) == "" && strings.TrimSpace(*pdfOut) != "" {
+			constraintArtifact.PDFPath = *pdfOut
+		}
+		constraintReport := food.BuildConstraintSatisfactionReport(constraintArtifact, *artifact.MealRunIntent)
 		artifact = food.AttachConstraintSatisfactionReport(artifact, constraintReport)
 		readinessGate = food.ApplyReadinessGate(&artifact, readinessPolicy)
 		if *intentOut != "" {

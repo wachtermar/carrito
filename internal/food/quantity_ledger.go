@@ -786,15 +786,18 @@ func buildProductAggregates(requirements []IngredientRequirement, selectedByIngr
 }
 
 func finalizeProductAggregate(agg *productAggregate) {
-	if agg == nil || agg.Evidence.Package.NetQuantity == nil || agg.RequiredBaseValue <= 0 || agg.RequiredBaseUnit == "" {
-		if agg != nil {
-			agg.NeedsReview = true
-		}
+	if agg == nil {
+		return
+	}
+	if agg.Evidence.Package.NetQuantity == nil || agg.RequiredBaseValue <= 0 || agg.RequiredBaseUnit == "" {
+		agg.NeedsReview = true
+		applySelectedPackageFallback(agg)
 		return
 	}
 	pkg := agg.Evidence.Package.NetQuantity.Expected
 	if pkg.BaseUnit != agg.RequiredBaseUnit || pkg.BaseValue <= 0 {
 		agg.NeedsReview = true
+		applySelectedPackageFallback(agg)
 		return
 	}
 	count := int(math.Ceil(agg.RequiredBaseValue / pkg.BaseValue))
@@ -818,6 +821,38 @@ func finalizeProductAggregate(agg *productAggregate) {
 	if agg.QuantityConfidence == 0 {
 		agg.QuantityConfidence = 0.5
 	}
+}
+
+func applySelectedPackageFallback(agg *productAggregate) {
+	if agg == nil {
+		return
+	}
+	count := selectedPackageCount(agg.Selected)
+	if count <= 0 {
+		return
+	}
+	if agg.PackageCount <= 0 {
+		agg.PackageCount = count
+	}
+	if agg.Purchased != nil || agg.Evidence.Package.NetQuantity == nil {
+		return
+	}
+	purchased := agg.Evidence.Package.NetQuantity.Expected
+	purchased.Value *= float64(count)
+	purchased.BaseValue *= float64(count)
+	purchased.Raw = fmt.Sprintf("%d package(s) x %s", count, purchased.Raw)
+	agg.Purchased = quantityRange(purchased, agg.Evidence.Package.NetQuantity.IsExact, agg.Evidence.Package.NetQuantity.Reason)
+}
+
+func selectedPackageCount(selected SelectedProduct) int {
+	if selected.PackageCount > 0 {
+		return selected.PackageCount
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(selected.PurchaseQuantity))
+	if err == nil && parsed > 0 {
+		return parsed
+	}
+	return 0
 }
 
 func buildAllocations(requirements []IngredientRequirement, selectedByIngredient map[string]SelectedProduct, evidenceByKey map[string]ProductEvidence, aggregates map[string]*productAggregate) []IngredientProductAllocation {

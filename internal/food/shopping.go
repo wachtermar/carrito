@@ -191,6 +191,9 @@ func scoreProduct(ingredient Ingredient, product alcampo.Product, profile Profil
 	if product.Available != nil && !*product.Available {
 		return ProductOption{Product: summary, Score: -1000000, RejectedReason: "unavailable in the selected market"}
 	}
+	if reason := nonHumanFoodRejectedReason(text); reason != "" {
+		return ProductOption{Product: summary, Score: -1000000, RejectedReason: reason}
+	}
 	if reason := productDietRejectedReason(text, profile.Diets); reason != "" {
 		return ProductOption{Product: summary, Score: -1000000, RejectedReason: reason}
 	}
@@ -293,6 +296,35 @@ func productDietRejectedReason(text string, diets []string) string {
 				return "conflicts with vegan diet"
 			}
 		}
+	}
+	return ""
+}
+
+var nonHumanFoodRejectKeys = []string{
+	"alimento para gato",
+	"alimento para gatos",
+	"alimento para perro",
+	"alimento para perros",
+	"canino",
+	"canina",
+	"comida para gato",
+	"comida para gatos",
+	"comida para perro",
+	"comida para perros",
+	"felino",
+	"felina",
+	"mascota",
+	"mascotas",
+	"para gato",
+	"para gatos",
+	"para perro",
+	"para perros",
+	"pienso",
+}
+
+func nonHumanFoodRejectedReason(text string) string {
+	if containsAnyKey(text, nonHumanFoodRejectKeys) {
+		return "appears to be pet or non-human food"
 	}
 	return ""
 }

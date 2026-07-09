@@ -76,8 +76,11 @@ func runCartGet(args []string, stdout, stderr io.Writer) error {
 	if err := parseInterspersed(fs, args, map[string]bool{"json": true, "raw": true}); err != nil {
 		return err
 	}
-	_, client, err := newClient("")
+	cfg, client, err := newClient("")
 	if err != nil {
+		return err
+	}
+	if err := requireReadSession(cfg, "cart reads"); err != nil {
 		return err
 	}
 	cart, err := client.Cart(context.Background(), true)

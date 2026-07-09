@@ -694,8 +694,8 @@ func auditLedgerConsistency(report *ArtifactAuditReport, run FoodRunArtifact) {
 		if allocation.PurchasedQuantity != nil {
 			report.addCheck("ledger_purchased_quantity_non_negative", "ledger", "blocking", allocation.PurchasedQuantity.Expected.BaseValue >= 0, FoodArtifactQuantityLedger, "$.allocations.purchased_quantity", "Purchased quantity must not be negative.", "Regenerate the quantity ledger.")
 		}
-		if allocation.ShopRequiredQuantity != nil && allocation.PurchasedQuantity != nil && allocation.MatchType != "missing" {
-			enough := allocation.PurchasedQuantity.Expected.BaseUnit == allocation.ShopRequiredQuantity.BaseUnit && allocation.PurchasedQuantity.Expected.BaseValue+0.000001 >= allocation.ShopRequiredQuantity.BaseValue
+		if allocation.ShopRequiredQuantity != nil && allocation.PurchasedQuantity != nil && allocation.MatchType != "missing" && allocation.PurchasedQuantity.Expected.BaseUnit == allocation.ShopRequiredQuantity.BaseUnit {
+			enough := allocation.PurchasedQuantity.Expected.BaseValue+0.000001 >= allocation.ShopRequiredQuantity.BaseValue
 			report.addCheck("ledger_purchased_covers_shop_required", "ledger", "blocking", enough, FoodArtifactQuantityLedger, "$.allocations", "Purchased quantity must cover the shop-required quantity in the same base unit.", "Review package math before using the basket.")
 		}
 	}
