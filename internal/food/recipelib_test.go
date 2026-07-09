@@ -43,6 +43,49 @@ func TestLoadRecipesMergesSeedAndUserOverride(t *testing.T) {
 	}
 }
 
+func TestSeedRecipesUseMeasurableBasketQuantities(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	cases := []struct {
+		recipeID   string
+		ingredient string
+		quantity   float64
+		unit       string
+	}{
+		{"lentil-stew", "carrot", 160, "g"},
+		{"lentil-stew", "vegetable stock", 500, "ml"},
+		{"chickpea-spinach-curry", "curry spice", 6, "g"},
+		{"chicken-fajita-bowls", "bell pepper", 300, "g"},
+		{"cod-pisto", "cod fillets", 300, "g"},
+		{"cod-pisto", "zucchini", 250, "g"},
+		{"cod-pisto", "red pepper", 200, "g"},
+		{"cod-pisto", "potato", 400, "g"},
+		{"hake-rice-soup", "hake fillets", 300, "g"},
+		{"hake-rice-soup", "leek", 180, "g"},
+		{"hake-rice-soup", "fish stock", 500, "ml"},
+		{"chicken-noodle-soup", "carrot", 160, "g"},
+		{"chicken-noodle-soup", "celery", 160, "g"},
+		{"chicken-noodle-soup", "chicken stock", 500, "ml"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.recipeID+"/"+tc.ingredient, func(t *testing.T) {
+			recipe, ok, err := LoadRecipe(tc.recipeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatalf("recipe %q not found", tc.recipeID)
+			}
+			ingredient, ok := recipeIngredientByName(recipe, tc.ingredient)
+			if !ok {
+				t.Fatalf("ingredient %q not found in %q", tc.ingredient, tc.recipeID)
+			}
+			if ingredient.Quantity != tc.quantity || ingredient.Unit != tc.unit {
+				t.Fatalf("%s/%s quantity = %g %s, want %g %s", tc.recipeID, tc.ingredient, ingredient.Quantity, ingredient.Unit, tc.quantity, tc.unit)
+			}
+		})
+	}
+}
+
 func TestLegacyRecipeJSONImportedOnceIntoDatabase(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	dir, err := RecipesDir()
@@ -73,6 +116,15 @@ func TestLegacyRecipeJSONImportedOnceIntoDatabase(t *testing.T) {
 	if _, err := LoadRecipes(); err != nil {
 		t.Fatalf("LoadRecipes should ignore legacy JSON after import: %v", err)
 	}
+}
+
+func recipeIngredientByName(recipe Recipe, name string) (Ingredient, bool) {
+	for _, ingredient := range recipe.Ingredients {
+		if ingredient.Name == name {
+			return ingredient, true
+		}
+	}
+	return Ingredient{}, false
 }
 
 func TestLoadRecipesRejectsMalformedUserFile(t *testing.T) {

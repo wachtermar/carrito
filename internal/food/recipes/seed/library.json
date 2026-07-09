@@ -56,10 +56,10 @@
     "tags": ["vegetarian", "vegan", "budget", "batch cooking", "dinner"],
     "ingredients": [
       {"name": "lentils", "quantity": 200, "unit": "g", "category": "pantry", "search_term": "lentejas"},
-      {"name": "carrot", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "zanahoria"},
-      {"name": "potato", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "patata"},
-      {"name": "onion", "quantity": 1, "unit": "unit", "category": "vegetables", "search_term": "cebolla"},
-      {"name": "vegetable stock", "quantity": 1, "unit": "unit", "category": "pantry", "search_term": "caldo verduras"}
+      {"name": "carrot", "quantity": 160, "unit": "g", "category": "vegetables", "search_term": "zanahoria bolsa"},
+      {"name": "potato", "quantity": 400, "unit": "g", "category": "vegetables", "search_term": "patata malla"},
+      {"name": "onion", "quantity": 150, "unit": "g", "category": "vegetables", "search_term": "cebolla"},
+      {"name": "vegetable stock", "quantity": 500, "unit": "ml", "category": "pantry", "search_term": "caldo verduras brick"}
     ],
     "equipment": ["soup pot", "knife", "ladle"],
     "steps": [
@@ -175,7 +175,7 @@
       {"name": "spinach", "quantity": 200, "unit": "g", "category": "vegetables", "search_term": "espinacas"},
       {"name": "coconut milk", "quantity": 200, "unit": "ml", "category": "pantry", "search_term": "leche de coco"},
       {"name": "rice", "quantity": 160, "unit": "g", "category": "pantry", "search_term": "arroz"},
-      {"name": "curry spice", "quantity": 1, "unit": "unit", "category": "pantry", "search_term": "curry"}
+      {"name": "curry spice", "quantity": 6, "unit": "g", "category": "pantry", "search_term": "curry"}
     ],
     "equipment": ["pot", "pan"],
     "steps": [
@@ -244,7 +244,7 @@
     "ingredients": [
       {"name": "chicken breast", "quantity": 350, "unit": "g", "category": "meat", "search_term": "pechuga de pollo"},
       {"name": "rice", "quantity": 160, "unit": "g", "category": "pantry", "search_term": "arroz"},
-      {"name": "bell pepper", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "pimiento"},
+      {"name": "bell pepper", "quantity": 300, "unit": "g", "category": "vegetables", "search_term": "pimiento barqueta"},
       {"name": "black beans", "quantity": 250, "unit": "g", "category": "pantry", "search_term": "frijoles negros"},
       {"name": "corn", "quantity": 150, "unit": "g", "category": "vegetables", "search_term": "maiz"}
     ],
@@ -338,11 +338,11 @@
     "cook_minutes": 30,
     "tags": ["fish", "spanish", "classic", "dinner"],
     "ingredients": [
-      {"name": "cod fillets", "quantity": 2, "unit": "unit", "category": "fish", "search_term": "bacalao"},
-      {"name": "zucchini", "quantity": 1, "unit": "unit", "category": "vegetables", "search_term": "calabacin"},
-      {"name": "red pepper", "quantity": 1, "unit": "unit", "category": "vegetables", "search_term": "pimiento rojo"},
+      {"name": "cod fillets", "quantity": 300, "unit": "g", "category": "fish", "search_term": "bacalao"},
+      {"name": "zucchini", "quantity": 250, "unit": "g", "category": "vegetables", "search_term": "calabacin"},
+      {"name": "red pepper", "quantity": 200, "unit": "g", "category": "vegetables", "search_term": "pimiento rojo barqueta"},
       {"name": "tomato sauce", "quantity": 250, "unit": "g", "category": "pantry", "search_term": "tomate triturado"},
-      {"name": "potato", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "patata"}
+      {"name": "potato", "quantity": 400, "unit": "g", "category": "vegetables", "search_term": "patata malla"}
     ],
     "equipment": ["pan", "pot"],
     "steps": [
@@ -457,11 +457,11 @@
     "cook_minutes": 25,
     "tags": ["fish", "spanish", "light", "dinner"],
     "ingredients": [
-      {"name": "hake fillets", "quantity": 2, "unit": "unit", "category": "fish", "search_term": "merluza"},
+      {"name": "hake fillets", "quantity": 300, "unit": "g", "category": "fish", "search_term": "merluza"},
       {"name": "rice", "quantity": 120, "unit": "g", "category": "pantry", "search_term": "arroz"},
-      {"name": "carrot", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "zanahoria"},
-      {"name": "leek", "quantity": 1, "unit": "unit", "category": "vegetables", "search_term": "puerro"},
-      {"name": "fish stock", "quantity": 1, "unit": "unit", "category": "pantry", "search_term": "caldo pescado"}
+      {"name": "carrot", "quantity": 160, "unit": "g", "category": "vegetables", "search_term": "zanahoria bolsa"},
+      {"name": "leek", "quantity": 180, "unit": "g", "category": "vegetables", "search_term": "puerro bandeja"},
+      {"name": "fish stock", "quantity": 500, "unit": "ml", "category": "pantry", "search_term": "caldo pescado brick"}
     ],
     "equipment": ["pot"],
     "steps": [
@@ -530,9 +530,9 @@
     "ingredients": [
       {"name": "chicken breast", "quantity": 300, "unit": "g", "category": "meat", "search_term": "pechuga de pollo"},
       {"name": "noodles", "quantity": 120, "unit": "g", "category": "pantry", "search_term": "fideos"},
-      {"name": "carrot", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "zanahoria"},
-      {"name": "celery", "quantity": 2, "unit": "unit", "category": "vegetables", "search_term": "apio"},
-      {"name": "chicken stock", "quantity": 1, "unit": "unit", "category": "pantry", "search_term": "caldo pollo"}
+      {"name": "carrot", "quantity": 160, "unit": "g", "category": "vegetables", "search_term": "zanahoria bolsa"},
+      {"name": "celery", "quantity": 160, "unit": "g", "category": "vegetables", "search_term": "apio"},
+      {"name": "chicken stock", "quantity": 500, "unit": "ml", "category": "pantry", "search_term": "caldo pollo brick"}
     ],
     "equipment": ["pot"],
     "steps": [

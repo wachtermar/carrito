@@ -529,6 +529,7 @@ const foodHTMLTemplate = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%2327664c'/%3E%3Cpath d='M20 35c9-1 16-8 20-18 5 10 3 21-5 27-6 5-15 4-20-1 2-3 3-5 5-8z' fill='%23fff'/%3E%3C/svg%3E">
 <title>{{.Title}}</title>
 <style>
 :root {

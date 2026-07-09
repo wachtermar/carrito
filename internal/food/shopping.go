@@ -194,6 +194,9 @@ func scoreProduct(ingredient Ingredient, product alcampo.Product, profile Profil
 	if reason := nonHumanFoodRejectedReason(text); reason != "" {
 		return ProductOption{Product: summary, Score: -1000000, RejectedReason: reason}
 	}
+	if reason := productFormRejectedReason(ingredient, text); reason != "" {
+		return ProductOption{Product: summary, Score: -1000000, RejectedReason: reason}
+	}
 	if reason := productDietRejectedReason(text, profile.Diets); reason != "" {
 		return ProductOption{Product: summary, Score: -1000000, RejectedReason: reason}
 	}
@@ -327,6 +330,66 @@ func nonHumanFoodRejectedReason(text string) string {
 		return "appears to be pet or non-human food"
 	}
 	return ""
+}
+
+var spiceFormKeys = []string{
+	"condimento",
+	"especia",
+	"especias",
+	"molida",
+	"molido",
+	"sazonador",
+}
+
+var spiceIngredientKeys = []string{
+	"curry",
+	"especia",
+	"spice",
+	"sazonador",
+}
+
+var cookedDeliMeatFormKeys = []string{
+	"asada",
+	"asado",
+	"charcuteria",
+	"cocida",
+	"cocido",
+	"embutido",
+	"fiambre",
+	"jamon",
+	"loncha",
+	"lonchas",
+}
+
+var cookedMeatRequestKeys = []string{
+	"asada",
+	"asado",
+	"cocida",
+	"cocido",
+	"fiambre",
+	"jamon",
+	"loncha",
+	"lonchas",
+}
+
+func productFormRejectedReason(ingredient Ingredient, productText string) string {
+	category := normalizeKey(ingredient.Category)
+	request := normalizeKey(strings.Join([]string{ingredient.Name, ingredient.SearchTerm}, " "))
+	if freshProduceIngredient(category) && !containsAnyKey(request, spiceIngredientKeys) && containsAnyKey(productText, spiceFormKeys) {
+		return "product form looks like spice or seasoning, not fresh produce"
+	}
+	if rawMeatIngredient(category) && !containsAnyKey(request, cookedMeatRequestKeys) && containsAnyKey(productText, cookedDeliMeatFormKeys) {
+		return "product form looks cooked or deli-style, not raw cooking meat"
+	}
+	return ""
+}
+
+func freshProduceIngredient(category string) bool {
+	return containsAnyKey(category, []string{"fruit", "fruta", "hortaliza", "produce", "vegetable", "vegetables", "verdura", "verduras"})
+}
+
+func rawMeatIngredient(category string) bool {
+	return containsAnyKey(category, []string{"carne", "meat"})
 }
 
 func budgetStatusNote(budgetEUR string, total money.Money) (string, bool) {

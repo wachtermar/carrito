@@ -512,6 +512,7 @@ func mealForSlot(plan MealPlan, slot AffectedRecipeSlot) (Meal, bool) {
 }
 
 func replaceRecipeInPlan(plan MealPlan, slot AffectedRecipeSlot, recipe Recipe) MealPlan {
+	plan = cloneMealPlan(plan)
 	for di := range plan.Days {
 		if plan.Days[di].Day != slot.Day {
 			continue

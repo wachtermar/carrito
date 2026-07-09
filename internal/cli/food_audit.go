@@ -138,7 +138,7 @@ func defaultFoodRunManifestPath(runPath, auditPath string) string {
 	return ""
 }
 
-func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledgerOut, nutritionLedgerOut, productEvidenceOut, intentOut, constraintReportOut, budgetRepairOut, budgetDealOut, servingPlanOut, scaledMealPlanOut, pantryOut, pantryConsumptionOut, readinessOut, recoveryOut, recipeSwapOut, basketOptimizationOut, recipeIntakeOut, recipeQualityOut string) map[string]string {
+func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, htmlPath, basketPath, ledgerOut, nutritionLedgerOut, productEvidenceOut, intentOut, constraintReportOut, budgetRepairOut, budgetDealOut, servingPlanOut, scaledMealPlanOut, pantryOut, pantryConsumptionOut, readinessOut, recoveryOut, recipeSwapOut, basketOptimizationOut, recipeIntakeOut, recipeQualityOut string) map[string]string {
 	paths := map[string]string{}
 	add := func(key, path string) {
 		path = strings.TrimSpace(path)
@@ -153,6 +153,7 @@ func foodRunArtifactPaths(planOut, shopOut, runPath, pdfPath, basketPath, ledger
 	add(food.FoodArtifactShop, shopOut)
 	add(food.FoodArtifactRun, runPath)
 	add(food.FoodArtifactPDF, pdfPath)
+	add(food.FoodArtifactHTML, htmlPath)
 	add(food.FoodArtifactBasket, basketPath)
 	add(food.FoodArtifactQuantityLedger, ledgerOut)
 	add(food.FoodArtifactNutritionLedger, nutritionLedgerOut)

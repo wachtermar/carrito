@@ -683,6 +683,7 @@ func TestFoodRunPlansAndShopsInOneCommand(t *testing.T) {
 	outputDir := t.TempDir()
 	basketPath := filepath.Join(outputDir, "basket.txt")
 	runPath := filepath.Join(outputDir, "run.json")
+	htmlPath := filepath.Join(outputDir, "run.html")
 	pdfPath := filepath.Join(outputDir, "run.pdf")
 	ledgerPath := filepath.Join(outputDir, "ledger.json")
 	readinessPath := filepath.Join(outputDir, "readiness.json")
@@ -698,6 +699,7 @@ func TestFoodRunPlansAndShopsInOneCommand(t *testing.T) {
 		BasketSafety   food.BasketSafety   `json:"basket_safety"`
 		ReadinessGate  food.ReadinessGate  `json:"readiness_gate"`
 		PDF            string              `json:"pdf"`
+		HTML           string              `json:"html"`
 		Basket         string              `json:"basket"`
 		Run            string              `json:"run"`
 		Ledger         string              `json:"ledger"`
@@ -718,6 +720,9 @@ func TestFoodRunPlansAndShopsInOneCommand(t *testing.T) {
 	}
 	if result.Run != runPath || result.PDF != pdfPath {
 		t.Fatalf("run/pdf paths missing from JSON: %+v", result)
+	}
+	if result.HTML != htmlPath {
+		t.Fatalf("automatic html path missing from JSON: %+v", result)
 	}
 	if result.Ledger != ledgerPath {
 		t.Fatalf("ledger path missing from JSON: %+v", result)
@@ -758,7 +763,7 @@ func TestFoodRunPlansAndShopsInOneCommand(t *testing.T) {
 	if artifact.QuantityLedger == nil || artifact.BasketSafety == nil || len(artifact.QuantityLedger.ProductEvidence) == 0 {
 		t.Fatalf("run artifact missing ledger trust data: %+v", artifact)
 	}
-	if artifact.PDFPath != pdfPath || artifact.BasketPath != basketPath {
+	if artifact.PDFPath != pdfPath || artifact.HTMLPath != htmlPath || artifact.BasketPath != basketPath {
 		t.Fatalf("run artifact missing output paths: %+v", artifact)
 	}
 	if len(artifact.MealPlan.Days[0].Meals) != 1 || artifact.MealPlan.Days[0].Meals[0].Type != "dinner" {
@@ -798,6 +803,15 @@ func TestFoodRunPlansAndShopsInOneCommand(t *testing.T) {
 	}
 	if !readiness.SafeToBuild || readiness.Status != food.ReadinessReadyExact {
 		t.Fatalf("unexpected readiness artifact: %+v", readiness)
+	}
+	htmlData, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Day 1", "Selected Alcampo products", "Alcampo product photo", "Oferta"} {
+		if !strings.Contains(string(htmlData), want) {
+			t.Fatalf("automatic HTML missing %q", want)
+		}
 	}
 	pdfData, err := os.ReadFile(pdfPath)
 	if err != nil {
@@ -1662,6 +1676,7 @@ func TestFoodRunRecordAndReplayLiveSnapshot(t *testing.T) {
 		t.Fatalf("record run did not hit live fixture: searches=%+v", searches)
 	}
 	var recordOut struct {
+		HTML     string                        `json:"html,omitempty"`
 		Snapshot *food.ManifestSnapshotSummary `json:"snapshot,omitempty"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &recordOut); err != nil {
@@ -1669,6 +1684,15 @@ func TestFoodRunRecordAndReplayLiveSnapshot(t *testing.T) {
 	}
 	if recordOut.Snapshot == nil || recordOut.Snapshot.Mode != alcampo.LiveSnapshotModeRecord || recordOut.Snapshot.EntryCount == 0 {
 		t.Fatalf("record output missing snapshot summary: %+v", recordOut.Snapshot)
+	}
+	recordHTML := strings.TrimSuffix(recordRun, filepath.Ext(recordRun)) + ".html"
+	if recordOut.HTML != recordHTML {
+		t.Fatalf("record output missing automatic html path: %+v", recordOut)
+	}
+	var recordManifestArtifact food.FoodRunManifest
+	readJSONFile(t, recordManifest, &recordManifestArtifact)
+	if recordManifestArtifact.ArtifactPaths[food.FoodArtifactHTML] != recordHTML {
+		t.Fatalf("manifest missing html artifact path: %+v", recordManifestArtifact.ArtifactPaths)
 	}
 
 	t.Setenv("ALCAMPO_BASE_URL", "http://127.0.0.1:1")

@@ -19,6 +19,7 @@ const (
 	FoodArtifactPlan                   = "plan"
 	FoodArtifactShop                   = "shop"
 	FoodArtifactPDF                    = "pdf"
+	FoodArtifactHTML                   = "html"
 	FoodArtifactBasket                 = "basket"
 	FoodArtifactQuantityLedger         = "quantity_ledger"
 	FoodArtifactNutritionLedger        = "nutrition_ledger"

@@ -325,6 +325,7 @@ type FoodRunArtifact struct {
 	BasketSafety                      *BasketSafety                 `json:"basket_safety,omitempty"`
 	ReadinessGate                     *ReadinessGate                `json:"readiness_gate,omitempty"`
 	PDFPath                           string                        `json:"pdf,omitempty"`
+	HTMLPath                          string                        `json:"html,omitempty"`
 	BasketPath                        string                        `json:"basket,omitempty"`
 	People                            int                           `json:"people,omitempty"`
 	Days                              int                           `json:"days,omitempty"`

@@ -45,6 +45,39 @@ func TestServingScalingAdultToddlerShorthand(t *testing.T) {
 	}
 }
 
+func TestServingScalingHouseholdProfileCanVaryParticipantsByDay(t *testing.T) {
+	plan := servingMultiDayTestPlan(7, 400)
+	policy := DefaultServingPolicy(true)
+	profile := HouseholdProfile{
+		SchemaVersion: "1",
+		Members: []HouseholdMember{
+			{ID: "adult-1", Type: "adult"},
+			{ID: "adult-2", Type: "adult"},
+			{ID: "adult-3", Type: "adult"},
+			{ID: "toddler", Type: "toddler"},
+		},
+		DefaultMealParticipation: []MealParticipationRule{
+			{MealSlot: "dinner", FromDay: 1, ToDay: 5, MemberIDs: []string{"adult-1", "adult-2", "adult-3", "toddler"}},
+			{MealSlot: "dinner", FromDay: 6, ToDay: 7, MemberIDs: []string{"adult-1", "adult-2", "toddler"}},
+		},
+	}
+
+	_, servingPlan, scaled := ApplyServingScaling(plan, profile, policy)
+
+	if servingPlan.Status != ServingPlanHouseholdProfile || len(servingPlan.Slots) != 7 {
+		t.Fatalf("serving plan = %+v", servingPlan)
+	}
+	if servingPlan.Slots[0].TargetServingUnits != 3.5 || len(servingPlan.Slots[0].Participants) != 4 {
+		t.Fatalf("weekday slot = %+v, want 3 adults + toddler", servingPlan.Slots[0])
+	}
+	if servingPlan.Slots[5].TargetServingUnits != 2.5 || len(servingPlan.Slots[5].Participants) != 3 {
+		t.Fatalf("weekend slot = %+v, want 2 adults + toddler", servingPlan.Slots[5])
+	}
+	if scaled.Slots[0].ScaleFactor != 0.875 || scaled.Slots[5].ScaleFactor != 0.625 {
+		t.Fatalf("scale factors = day1 %.3g day6 %.3g", scaled.Slots[0].ScaleFactor, scaled.Slots[5].ScaleFactor)
+	}
+}
+
 func TestServingScalingPartialPantryDeltaFeedsLedger(t *testing.T) {
 	plan := servingTestPlan(4, 400)
 	servingPolicy := DefaultServingPolicy(true)
@@ -140,4 +173,21 @@ func servingTestPlan(servings int, riceGrams float64) MealPlan {
 		}}}}},
 		RequiredPurchases: []Ingredient{{Name: "rice", Quantity: riceGrams, Unit: "g", Category: "pantry", SearchTerm: "arroz"}},
 	}
+}
+
+func servingMultiDayTestPlan(days int, riceGrams float64) MealPlan {
+	plan := MealPlan{ID: "serving-plan-week", People: 4}
+	for day := 1; day <= days; day++ {
+		plan.Days = append(plan.Days, DayPlan{Day: day, Meals: []Meal{{Type: "dinner", Recipe: Recipe{
+			ID:       "rice-bowl",
+			Title:    "Rice Bowl",
+			Servings: 4,
+			Ingredients: []Ingredient{
+				{Name: "rice", Quantity: riceGrams, Unit: "g", Category: "pantry", SearchTerm: "arroz"},
+			},
+			Steps: []RecipeStep{{Number: 1, Text: "Cook rice."}},
+		}}}})
+	}
+	plan.RequiredPurchases = []Ingredient{{Name: "rice", Quantity: riceGrams * float64(days), Unit: "g", Category: "pantry", SearchTerm: "arroz"}}
+	return plan
 }

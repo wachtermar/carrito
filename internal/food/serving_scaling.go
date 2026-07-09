@@ -94,16 +94,20 @@ func BuildServingPlan(plan MealPlan, household HouseholdProfile, policy ServingP
 	}
 	for _, day := range plan.Days {
 		for _, meal := range day.Meals {
+			slotTarget := target
+			slotParticipants := participants
+			if len(household.Members) > 0 {
+				slotTarget, slotParticipants = servingTargetFromHouseholdSlot(household, day.Day, meal.Type)
+			}
 			slot := ServingSlot{
 				Day:                day.Day,
 				MealSlot:           meal.Type,
 				RecipeID:           meal.Recipe.ID,
 				RecipeTitle:        meal.Recipe.Title,
 				BaseRecipeServings: mealBaseServings(meal.Recipe, plan),
-				Participants:       append([]ServingParticipant(nil), participants...),
+				Participants:       append([]ServingParticipant(nil), slotParticipants...),
 				ScalingStatus:      ScalingStatusExact,
 			}
-			slotTarget := target
 			if slotTarget <= 0 {
 				slotTarget = slot.BaseRecipeServings
 				slot.ScalingStatus = ScalingStatusRecipeDefault
@@ -292,19 +296,8 @@ func AttachServingScaling(artifact FoodRunArtifact, household HouseholdProfile, 
 
 func servingTargetFromInputs(profile HouseholdProfile, policy ServingPolicy) (float64, []ServingParticipant, ServingPlanStatus) {
 	if len(profile.Members) > 0 {
-		var total float64
-		var participants []ServingParticipant
-		for _, member := range profile.Members {
-			factor := positiveOrDefault(member.DefaultServingFactor, defaultServingFactor(member.Type))
-			total += factor
-			participants = append(participants, ServingParticipant{
-				MemberID:      member.ID,
-				DisplayName:   member.DisplayName,
-				ServingFactor: factor,
-				PortionType:   member.Type,
-			})
-		}
-		return roundQty(total), participants, ServingPlanHouseholdProfile
+		total, participants := servingTargetForMembers(profile.Members)
+		return total, participants, ServingPlanHouseholdProfile
 	}
 	if policy.AdultServings > 0 || policy.ChildServings > 0 || policy.ToddlerServings > 0 {
 		var participants []ServingParticipant
@@ -323,6 +316,71 @@ func servingTargetFromInputs(profile HouseholdProfile, policy ServingPolicy) (fl
 		return roundQty(policy.DefaultServings), nil, ServingPlanExplicitServings
 	}
 	return 0, nil, ServingPlanRecipeDefault
+}
+
+func servingTargetFromHouseholdSlot(profile HouseholdProfile, day int, mealSlot string) (float64, []ServingParticipant) {
+	members := profile.Members
+	for _, rule := range profile.DefaultMealParticipation {
+		if mealParticipationRuleMatches(rule, day, mealSlot) {
+			members = householdMembersByID(profile.Members, rule.MemberIDs)
+			break
+		}
+	}
+	return servingTargetForMembers(members)
+}
+
+func servingTargetForMembers(members []HouseholdMember) (float64, []ServingParticipant) {
+	var total float64
+	var participants []ServingParticipant
+	for _, member := range members {
+		factor := positiveOrDefault(member.DefaultServingFactor, defaultServingFactor(member.Type))
+		total += factor
+		participants = append(participants, ServingParticipant{
+			MemberID:      member.ID,
+			DisplayName:   member.DisplayName,
+			ServingFactor: factor,
+			PortionType:   member.Type,
+		})
+	}
+	return roundQty(total), participants
+}
+
+func householdMembersByID(members []HouseholdMember, ids []string) []HouseholdMember {
+	if len(ids) == 0 {
+		return nil
+	}
+	byID := make(map[string]HouseholdMember, len(members))
+	for _, member := range members {
+		byID[member.ID] = member
+	}
+	out := make([]HouseholdMember, 0, len(ids))
+	for _, id := range ids {
+		if member, ok := byID[id]; ok {
+			out = append(out, member)
+		}
+	}
+	return out
+}
+
+func mealParticipationRuleMatches(rule MealParticipationRule, day int, mealSlot string) bool {
+	if rule.MealSlot != "" && rule.MealSlot != "*" && normalizeKey(rule.MealSlot) != normalizeKey(mealSlot) {
+		return false
+	}
+	if len(rule.Days) > 0 {
+		for _, value := range rule.Days {
+			if value == day {
+				return true
+			}
+		}
+		return false
+	}
+	if rule.FromDay > 0 && day < rule.FromDay {
+		return false
+	}
+	if rule.ToDay > 0 && day > rule.ToDay {
+		return false
+	}
+	return true
 }
 
 func defaultServingFactor(memberType string) float64 {
@@ -484,7 +542,87 @@ func summarizeScaledSlots(slots []ScaledRecipeSlot) ScaledMealPlanSummary {
 	return summary
 }
 
+func cloneMealPlan(plan MealPlan) MealPlan {
+	plan.Days = append([]DayPlan(nil), plan.Days...)
+	for dayIdx := range plan.Days {
+		plan.Days[dayIdx].Meals = append([]Meal(nil), plan.Days[dayIdx].Meals...)
+		for mealIdx := range plan.Days[dayIdx].Meals {
+			plan.Days[dayIdx].Meals[mealIdx].Recipe = cloneRecipe(plan.Days[dayIdx].Meals[mealIdx].Recipe)
+		}
+	}
+	plan.PantryUsage = append([]PantryUsage(nil), plan.PantryUsage...)
+	plan.RequiredPurchases = append([]Ingredient(nil), plan.RequiredPurchases...)
+	plan.MissingItems = append([]string(nil), plan.MissingItems...)
+	plan.Notes = append([]string(nil), plan.Notes...)
+	if plan.Nutrition != nil {
+		nutrition := *plan.Nutrition
+		plan.Nutrition = &nutrition
+	}
+	return plan
+}
+
+func cloneRecipe(recipe Recipe) Recipe {
+	recipe.Tags = append([]string(nil), recipe.Tags...)
+	recipe.Ingredients = append([]Ingredient(nil), recipe.Ingredients...)
+	recipe.Equipment = append([]string(nil), recipe.Equipment...)
+	recipe.Steps = append([]RecipeStep(nil), recipe.Steps...)
+	recipe.Substitutions = append([]string(nil), recipe.Substitutions...)
+	recipe.AllergenNotes = append([]string(nil), recipe.AllergenNotes...)
+	if recipe.NutritionPerServing != nil {
+		nutrition := *recipe.NutritionPerServing
+		recipe.NutritionPerServing = &nutrition
+	}
+	return recipe
+}
+
+func cloneServingPlan(plan ServingPlan) ServingPlan {
+	plan.Slots = append([]ServingSlot(nil), plan.Slots...)
+	for i := range plan.Slots {
+		plan.Slots[i].Participants = append([]ServingParticipant(nil), plan.Slots[i].Participants...)
+		plan.Slots[i].Warnings = append([]string(nil), plan.Slots[i].Warnings...)
+		if plan.Slots[i].LeftoverPlan != nil {
+			leftover := *plan.Slots[i].LeftoverPlan
+			leftover.ConsumedBy = append([]string(nil), leftover.ConsumedBy...)
+			plan.Slots[i].LeftoverPlan = &leftover
+		}
+	}
+	plan.BlockingIssues = append([]ServingIssue(nil), plan.BlockingIssues...)
+	plan.Warnings = append([]ServingIssue(nil), plan.Warnings...)
+	return plan
+}
+
+func cloneScaledMealPlan(plan ScaledMealPlan) ScaledMealPlan {
+	plan.Slots = append([]ScaledRecipeSlot(nil), plan.Slots...)
+	for slotIdx := range plan.Slots {
+		plan.Slots[slotIdx].Ingredients = append([]ScaledIngredient(nil), plan.Slots[slotIdx].Ingredients...)
+		plan.Slots[slotIdx].ScalingNotes = append([]string(nil), plan.Slots[slotIdx].ScalingNotes...)
+		for ingredientIdx := range plan.Slots[slotIdx].Ingredients {
+			ingredient := &plan.Slots[slotIdx].Ingredients[ingredientIdx]
+			if ingredient.OriginalQuantity != nil {
+				q := *ingredient.OriginalQuantity
+				ingredient.OriginalQuantity = &q
+			}
+			if ingredient.ScaledQuantity != nil {
+				q := *ingredient.ScaledQuantity
+				ingredient.ScaledQuantity = &q
+			}
+			if ingredient.ShoppingQuantity != nil {
+				q := *ingredient.ShoppingQuantity
+				ingredient.ShoppingQuantity = &q
+			}
+			if ingredient.CookingQuantity != nil {
+				q := *ingredient.CookingQuantity
+				ingredient.CookingQuantity = &q
+			}
+			ingredient.Usages = append([]IngredientUsageRef(nil), ingredient.Usages...)
+		}
+	}
+	plan.Warnings = append([]ScalingWarning(nil), plan.Warnings...)
+	return plan
+}
+
 func applyScaledMealPlanToMealPlan(plan MealPlan, scaled ScaledMealPlan) MealPlan {
+	plan = cloneMealPlan(plan)
 	scaledBySlot := map[string]ScaledRecipeSlot{}
 	for _, slot := range scaled.Slots {
 		scaledBySlot[servingSlotKey(slot.Day, slot.MealSlot, slot.RecipeID)] = slot
@@ -511,6 +649,9 @@ func applyScaledMealPlanToMealPlan(plan MealPlan, scaled ScaledMealPlan) MealPla
 }
 
 func ReplaceScaledRecipeSlot(plan MealPlan, servingPlan ServingPlan, scaled ScaledMealPlan, day int, mealSlot string, replacement Recipe, policy ScalingPolicy) (MealPlan, ServingPlan, ScaledMealPlan) {
+	plan = cloneMealPlan(plan)
+	servingPlan = cloneServingPlan(servingPlan)
+	scaled = cloneScaledMealPlan(scaled)
 	for i := range servingPlan.Slots {
 		slot := &servingPlan.Slots[i]
 		if slot.Day != day || strings.TrimSpace(slot.MealSlot) != strings.TrimSpace(mealSlot) {

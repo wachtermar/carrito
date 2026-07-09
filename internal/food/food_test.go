@@ -383,6 +383,79 @@ func TestSelectProductRejectsPetFoodForHumanIngredient(t *testing.T) {
 	}
 }
 
+func TestSelectProductRejectsSeasoningForFreshVegetable(t *testing.T) {
+	available := true
+	selection := SelectProduct(Ingredient{Name: "celery", Quantity: 280, Unit: "g", Category: "vegetables", SearchTerm: "apio"}, []alcampo.Product{
+		{
+			SKU:       "ground-celery",
+			Name:      "CARMENCITA Apio molido 43 g.",
+			Category:  "Especias",
+			Size:      "43 g",
+			Price:     money.Money{Amount: "1.29", Currency: "EUR", Cents: 129},
+			UnitPrice: money.Money{Amount: "30.00", Currency: "EUR", Cents: 3000},
+			Available: &available,
+			Images:    []string{"https://example.test/apio-molido.jpg"},
+		},
+		{
+			SKU:       "fresh-celery",
+			Name:      "Apio verde manojo",
+			Category:  "Puerros",
+			Price:     money.Money{Amount: "1.79", Currency: "EUR", Cents: 179},
+			UnitPrice: money.Money{Amount: "1.79", Currency: "EUR", Cents: 179},
+			Available: &available,
+			Images:    []string{"https://example.test/apio.jpg"},
+		},
+	}, Profile{}, PolicyBalanced)
+	if selection.Error != "" {
+		t.Fatalf("selection error: %s", selection.Error)
+	}
+	if selection.Product.SKU != "fresh-celery" {
+		t.Fatalf("selected sku = %q, want fresh-celery; selection=%+v", selection.Product.SKU, selection)
+	}
+	for _, alternate := range selection.Alternates {
+		if alternate.Product.SKU == "ground-celery" && alternate.RejectedReason == "" {
+			t.Fatalf("seasoning product should be rejected, alternates=%+v", selection.Alternates)
+		}
+	}
+}
+
+func TestSelectProductRejectsCookedDeliMeatForRawMeatIngredient(t *testing.T) {
+	available := true
+	selection := SelectProduct(Ingredient{Name: "chicken breast", Quantity: 525, Unit: "g", Category: "meat", SearchTerm: "pechuga de pollo"}, []alcampo.Product{
+		{
+			SKU:       "deli-chicken",
+			Name:      "EL POZO Pechuga de pollo asada lonchas 120 g.",
+			Category:  "Charcuteria",
+			Size:      "120 g",
+			Price:     money.Money{Amount: "1.99", Currency: "EUR", Cents: 199},
+			UnitPrice: money.Money{Amount: "16.58", Currency: "EUR", Cents: 1658},
+			Available: &available,
+			Images:    []string{"https://example.test/pechuga-asada.jpg"},
+		},
+		{
+			SKU:       "raw-chicken",
+			Name:      "Pechuga de pollo filetes 600 g.",
+			Category:  "Pollo",
+			Size:      "600 g",
+			Price:     money.Money{Amount: "4.20", Currency: "EUR", Cents: 420},
+			UnitPrice: money.Money{Amount: "7.00", Currency: "EUR", Cents: 700},
+			Available: &available,
+			Images:    []string{"https://example.test/pechuga.jpg"},
+		},
+	}, Profile{}, PolicyBalanced)
+	if selection.Error != "" {
+		t.Fatalf("selection error: %s", selection.Error)
+	}
+	if selection.Product.SKU != "raw-chicken" {
+		t.Fatalf("selected sku = %q, want raw-chicken; selection=%+v", selection.Product.SKU, selection)
+	}
+	for _, alternate := range selection.Alternates {
+		if alternate.Product.SKU == "deli-chicken" && alternate.RejectedReason == "" {
+			t.Fatalf("deli meat should be rejected, alternates=%+v", selection.Alternates)
+		}
+	}
+}
+
 func TestSelectProductRejectsAccentedDietTermsWithoutFalseHamMatch(t *testing.T) {
 	available := true
 	selection := SelectProduct(Ingredient{Name: "vegetables", SearchTerm: "verduras"}, []alcampo.Product{
@@ -939,6 +1012,7 @@ func TestWriteHTMLFromJSONFileFoodRunArtifactCreatesMobileCookingPage(t *testing
 	html := string(htmlData)
 	for _, want := range []string{
 		`<meta name="viewport" content="width=device-width, initial-scale=1">`,
+		`<link rel="icon" href="data:image/svg+xml,`,
 		`href="#day-1"`,
 		"Test Dinner",
 		"1 day",

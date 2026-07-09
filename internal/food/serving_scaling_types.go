@@ -48,6 +48,9 @@ type HouseholdMember struct {
 
 type MealParticipationRule struct {
 	MealSlot  string   `json:"meal_slot,omitempty"`
+	Days      []int    `json:"days,omitempty"`
+	FromDay   int      `json:"from_day,omitempty"`
+	ToDay     int      `json:"to_day,omitempty"`
 	MemberIDs []string `json:"member_ids,omitempty"`
 }
 
