@@ -17,8 +17,8 @@ metadata:
         default: "~/.local/bin/carrito"
         prompt: Carrito CLI path
       - key: carrito.config_dir
-        description: Optional carrito CLI config directory
-        default: "~/.carrito"
+        description: Optional explicit carrito CLI config directory override. Leave blank to preserve CARRITO_CONFIG_DIR or the CLI default.
+        default: ""
         prompt: Carrito config directory
   openclaw:
     homepage: https://github.com/wachtermar/carrito

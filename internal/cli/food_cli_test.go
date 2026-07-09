@@ -1878,6 +1878,101 @@ func TestFoodCookHighRatingLearnsLikedRecipesAndListsHistory(t *testing.T) {
 	}
 }
 
+func TestFoodCookRunArtifactConsumesReceivedIngredients(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ALCAMPO_CONFIG_DIR", dir)
+	plan := food.MealPlan{
+		ID: "plan-run-cook",
+		Days: []food.DayPlan{{
+			Day: 1,
+			Meals: []food.Meal{{
+				Type: "dinner",
+				Recipe: food.Recipe{
+					ID:    "chicken-rice",
+					Title: "Chicken Rice",
+					Ingredients: []food.Ingredient{
+						{Name: "chicken breast fillets", SearchTerm: "pechuga pollo filetes", Quantity: 320, Unit: "g", Category: "meat"},
+						{Name: "brown rice", SearchTerm: "arroz integral", Quantity: 180, Unit: "g", Category: "pantry"},
+					},
+				},
+			}},
+		}},
+	}
+	runOutput := struct {
+		SchemaVersion int             `json:"schema_version"`
+		Kind          string          `json:"kind"`
+		MealPlan      food.MealPlan   `json:"mealplan"`
+		Shop          food.ShopResult `json:"shop"`
+	}{
+		SchemaVersion: 1,
+		Kind:          "food_run",
+		MealPlan:      plan,
+		Shop: food.ShopResult{
+			MealPlanID: plan.ID,
+			SelectedProducts: []food.SelectedProduct{
+				{
+					Ingredient:       food.Ingredient{Name: "chicken breast fillets", Category: "meat"},
+					Product:          food.ProductSummary{SKU: "chicken-sku", Name: "Pechuga pollo", PackageQuantity: 320, PackageUnit: "g"},
+					PurchaseQuantity: "1",
+					PackageCount:     1,
+				},
+				{
+					Ingredient:       food.Ingredient{Name: "brown rice", Category: "pantry"},
+					Product:          food.ProductSummary{SKU: "rice-sku", Name: "Arroz integral", PackageQuantity: 250, PackageUnit: "g"},
+					PurchaseQuantity: "1",
+					PackageCount:     1,
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(runOutput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runPath := filepath.Join(t.TempDir(), "run.json")
+	if err := os.WriteFile(runPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run([]string{"food", "receive", runPath, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("receive Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "cook", runPath, "--rating", "5", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("cook Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var result food.CookResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("cook output was not JSON: %v\n%s", err, stdout.String())
+	}
+	if len(result.Applied) != 2 || len(result.Missing) != 0 {
+		t.Fatalf("run artifact cook did not consume delivered ingredients: %+v", result)
+	}
+	pantry, err := food.LoadPantry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	remaining := map[string]float64{}
+	for _, item := range pantry.Items {
+		remaining[item.Name] = item.Quantity
+	}
+	if _, ok := remaining["chicken breast fillets"]; ok {
+		t.Fatalf("fully used chicken should be removed from pantry: %+v", pantry)
+	}
+	if remaining["brown rice"] != 70 {
+		t.Fatalf("brown rice remaining = %.3g, want 70; pantry=%+v", remaining["brown rice"], pantry)
+	}
+	profile, err := food.LoadProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(profile.LikedRecipes) != 1 || profile.LikedRecipes[0] != "chicken-rice" {
+		t.Fatalf("liked recipe not learned from run artifact cook: %+v", profile)
+	}
+}
+
 func TestFoodCookLowRatingLearnsRejectedRecipes(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ALCAMPO_CONFIG_DIR", dir)

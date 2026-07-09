@@ -165,7 +165,7 @@ func LoadMealPlan(ref string) (MealPlan, error) {
 	var lastErr error
 	for _, path := range candidates {
 		var plan MealPlan
-		if err := readJSONFile(path, &plan); err == nil {
+		if err := readJSONFile(path, &plan); err == nil && mealPlanPresent(plan) {
 			if plan.File == "" {
 				if abs, absErr := filepath.Abs(path); absErr == nil {
 					plan.File = abs
@@ -177,11 +177,50 @@ func LoadMealPlan(ref string) (MealPlan, error) {
 		} else {
 			lastErr = err
 		}
+		artifactPlan, err := loadMealPlanFromRunArtifact(path)
+		if err == nil {
+			if artifactPlan.File == "" {
+				if abs, absErr := filepath.Abs(path); absErr == nil {
+					artifactPlan.File = abs
+				} else {
+					artifactPlan.File = path
+				}
+			}
+			return artifactPlan, nil
+		}
 	}
 	if lastErr != nil {
 		return MealPlan{}, lastErr
 	}
 	return MealPlan{}, os.ErrNotExist
+}
+
+func mealPlanPresent(plan MealPlan) bool {
+	return strings.TrimSpace(plan.ID) != "" ||
+		len(plan.Days) > 0 ||
+		len(plan.RequiredPurchases) > 0 ||
+		len(plan.PantryUsage) > 0
+}
+
+func loadMealPlanFromRunArtifact(path string) (MealPlan, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return MealPlan{}, err
+	}
+	var wrapper struct {
+		Kind     string   `json:"kind,omitempty"`
+		MealPlan MealPlan `json:"mealplan"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		return MealPlan{}, err
+	}
+	if strings.TrimSpace(wrapper.Kind) != "" && wrapper.Kind != "food_run" {
+		return MealPlan{}, fmt.Errorf("%s does not contain a food run artifact", path)
+	}
+	if !mealPlanPresent(wrapper.MealPlan) {
+		return MealPlan{}, fmt.Errorf("%s does not contain a mealplan", path)
+	}
+	return wrapper.MealPlan, nil
 }
 
 func LoadShopResult(path string) (ShopResult, error) {

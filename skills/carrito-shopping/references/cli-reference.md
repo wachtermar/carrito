@@ -93,7 +93,7 @@ carrito food pdf <recipe-or-plan-shop-run.json> --out food-plan.pdf
 carrito food receive <shop-or-run.json> --json
 carrito food import-receipt --file receipt.txt --json
 carrito food import-orders --limit 5 --since 2026-01-01 --infer-staples --json
-carrito food cook <mealplan-id-or-file> --rating 5 --json
+carrito food cook <mealplan-id-or-run-file> --rating 5 --json
 carrito food history list --limit 20 --json
 ```
 
@@ -121,7 +121,7 @@ Expiry behavior: pantry text output marks items expiring within three days with 
 
 Use `--basket-out basket.txt` on `food shop` or `food run` when the next step may be guarded cart preparation. For `food run`, trust the file only when `readiness_gate.safe_to_build` is true, and do not describe the whole meal plan as complete unless `readiness_gate.safe_to_cook` is also true. Ready files start with readiness comment headers followed by `<product_id_or_sku> <qty> # comment` lines. Blocked files start with `# NOT SAFE TO BUILD BASKET` and contain diagnostic comments only; never pass a blocked basket to `total` or `cart set-many`. When ready and after explicit approval, use `carrito total -f basket.txt --json --max <eur>` and then `carrito cart set-many -f basket.txt --max <eur> --json`.
 
-Use `food receive <shop-or-run.json>` only after the user says the shop was actually bought, picked up, or delivered. It imports selected products into `pantry.json` using product package size times purchased package count when available, falls back to planned ingredient quantity when package size is unknown, infers pantry/fridge/freezer location from item category/name, and writes a `shop_received` event to `history.jsonl`.
+Use `food receive <shop-or-run.json>` only after the user says the shop was actually bought, picked up, or delivered. It imports selected products into `pantry.json` using product package size times purchased package count when available, falls back to planned ingredient quantity when package size is unknown, infers pantry/fridge/freezer location from item category/name, and writes a `shop_received` event to `history.jsonl`. After that, `food cook <mealplan-id-or-run-file>` accepts the same run JSON and consumes cooked recipe quantities from pantry before writing `mealplan_cooked` history.
 
 Use `food import-receipt --file <text|->` for pasted/plain-text grocery receipts. It is best-effort: recognized lines become pantry items, skipped lines become warnings, and a `receipt_imported` history event is written. Use `food import-orders` only with a logged-in/imported session; it tries known private order-history endpoints, maps returned order lines into pantry items, writes `orders_imported` history, and can return `suggested_staples` with `--infer-staples`.
 

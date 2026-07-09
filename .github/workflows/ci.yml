@@ -24,6 +24,8 @@ jobs:
         run: go mod download
       - name: Check formatting
         run: test -z "$(gofmt -l $(find . -name '*.go' -print))"
+      - name: Check Carrito skill config-dir guidance
+        run: python3 skills/carrito-shopping/scripts/check-skill-config-dir.py
       - name: Test
         run: go test ./...
       - name: Vet

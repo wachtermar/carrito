@@ -17,8 +17,8 @@ metadata:
         default: "~/.local/bin/carrito"
         prompt: Carrito CLI path
       - key: carrito.config_dir
-        description: Optional carrito CLI config directory
-        default: "~/.carrito"
+        description: Optional explicit carrito CLI config directory override. Leave blank to preserve CARRITO_CONFIG_DIR or the CLI default.
+        default: ""
         prompt: Carrito config directory
   openclaw:
     homepage: https://github.com/wachtermar/carrito
@@ -71,7 +71,7 @@ In Hermes, `${HERMES_SKILL_DIR}` is substituted with this skill directory. In Op
 3. If the installer cannot find source, ask for the local `carrito` checkout path or a repo URL, then rerun the installer with that path as the first argument.
 4. Prefer `<resolved-carrito> --help` after install to confirm the executable works. During normal user tasks, do not probe subcommand `--help`; use `references/cli-reference.md` for command shapes. If help is needed for troubleshooting, run it as a standalone diagnostic and treat usage text on stderr as normal.
 5. Before authenticated commands, run `<resolved-carrito> login-web --if-needed --json`; this opens a temporary local browser login form only when the user is not already logged in.
-6. If Hermes injects `carrito.config_dir`, set `CARRITO_CONFIG_DIR` for CLI commands only when the user wants that non-default state directory. Do not move auth or food memory silently.
+6. Preserve any existing `CARRITO_CONFIG_DIR` in the terminal environment. Do not overwrite an existing `CARRITO_CONFIG_DIR`, and never export `CARRITO_CONFIG_DIR` to `~/.carrito` or `$HOME/.carrito` just because that is the CLI default. If Hermes injects a non-empty `carrito.config_dir`, set `CARRITO_CONFIG_DIR` for CLI commands only when the user/profile explicitly wants that non-default state directory. If the injected value is empty, unset, `~/.carrito`, or `$HOME/.carrito`, omit the export and let the CLI use the current environment or its own default. Do not move auth or food memory silently.
 
 ## Workflow
 
@@ -110,7 +110,7 @@ In Hermes, `${HERMES_SKILL_DIR}` is substituted with this skill directory. In Op
 16. Add custom recipes with `carrito food recipes add <file|-> --json`, or `--from-text --title <title>` for pasted ingredient lists. For external recipe webpages, prefer extracting the page's Recipe JSON-LD/schema data, then write a full recipe JSON file and import it with `carrito food recipes add <file> --json`; this preserves ingredients, steps, timing, tags, image, allergens, and nutrition better than `--from-text`. Add Spanish Alcampo-oriented `search_term` values for ingredients when possible, then verify with both `carrito food recipes show <id> --json` and `carrito food recipes search <query> --json`.
 17. After the user confirms a shop was actually bought or delivered, use `carrito food receive <shop-or-run.json> --json` to add received products to pantry memory and append history.
 18. Import external pantry evidence with `carrito food import-receipt --file <text|-> --json`, or authenticated best-effort order history with `carrito food import-orders --limit <n> --infer-staples --json`.
-19. After the user cooks a plan, use `carrito food cook <mealplan-id-or-file> --rating <1-5> --json` to update pantry quantities, append history, learn liked recipes from high ratings, and learn rejected recipes from low ratings.
+19. After the user cooks a plan, use `carrito food cook <mealplan-id-or-run-file> --rating <1-5> --json` to consume cooked recipe quantities from pantry, append history, learn liked recipes from high ratings, and learn rejected recipes from low ratings. When the user just received a `food run` shop, pass the same run JSON to `food cook`; do not extract a mealplan or manually apply ingredient usage unless troubleshooting an older CLI.
 20. Use `carrito food history list --json` when prior cooking, receiving, receipt, or order import feedback would improve a new plan.
 21. For basket pricing, write or receive a basket file with `<product_id_or_sku> <qty>` per line, then run `carrito total -f <file> --json`.
 22. For cart or checkout writes, require an authenticated/imported session and a nonzero spending guard: `--max <eur>`, `CARRITO_MAX_EUR`, or `[limits] max_eur`.

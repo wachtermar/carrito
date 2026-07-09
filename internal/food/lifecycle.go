@@ -15,7 +15,7 @@ func CookMealPlan(plan MealPlan, pantry Pantry, note string, rating int) (Pantry
 		Note:       strings.TrimSpace(note),
 		Rating:     rating,
 	}
-	for _, usage := range plan.PantryUsage {
+	for _, usage := range cookUsageCandidates(plan) {
 		var applied PantryUsage
 		var ok bool
 		pantry, applied, ok = applyPantryUsage(pantry, usage)
@@ -29,15 +29,43 @@ func CookMealPlan(plan MealPlan, pantry Pantry, note string, rating int) (Pantry
 	return pantry, result
 }
 
+func cookUsageCandidates(plan MealPlan) []PantryUsage {
+	var ingredients []Ingredient
+	for _, day := range plan.Days {
+		for _, meal := range day.Meals {
+			for _, ing := range meal.Recipe.Ingredients {
+				if ing.Optional || ing.Quantity <= 0 {
+					continue
+				}
+				ingredients = append(ingredients, ing)
+			}
+		}
+	}
+	if len(ingredients) == 0 {
+		return append([]PantryUsage(nil), plan.PantryUsage...)
+	}
+	ingredients = mergeIngredients(ingredients)
+	usages := make([]PantryUsage, 0, len(ingredients))
+	for _, ing := range ingredients {
+		usages = append(usages, PantryUsage{
+			Ingredient: ing.Name,
+			PantryItem: strutil.FirstNonEmpty(ing.SearchTerm, ing.Name),
+			Quantity:   ing.Quantity,
+			Unit:       ing.Unit,
+		})
+	}
+	return usages
+}
+
 func applyPantryUsage(p Pantry, usage PantryUsage) (Pantry, PantryUsage, bool) {
-	name := strutil.FirstNonEmpty(usage.PantryItem, usage.Ingredient)
 	unit := normalizeUnit(usage.Unit)
-	if strings.TrimSpace(name) == "" || usage.Quantity <= 0 {
+	names := []string{usage.PantryItem, usage.Ingredient}
+	if strings.TrimSpace(strings.Join(names, "")) == "" || usage.Quantity <= 0 {
 		return p, PantryUsage{}, false
 	}
 	for i := range p.Items {
 		item := p.Items[i]
-		if !namesMatch(item.Name, name) {
+		if !matchesAnyPantryName(item.Name, names) {
 			continue
 		}
 		if unit != "" && item.Unit != "" && normalizeUnit(item.Unit) != unit {
@@ -65,6 +93,15 @@ func applyPantryUsage(p Pantry, usage PantryUsage) (Pantry, PantryUsage, bool) {
 		return p, applied, true
 	}
 	return p, PantryUsage{}, false
+}
+
+func matchesAnyPantryName(item string, names []string) bool {
+	for _, name := range names {
+		if strings.TrimSpace(name) != "" && namesMatch(item, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func recipeFeedbackFromPlan(plan MealPlan) []RecipeFeedback {
