@@ -72,6 +72,50 @@ func TestArtifactAuditProductEvidenceTrustFlags(t *testing.T) {
 	}
 }
 
+func TestArtifactAuditLedgerCoverageCheckSkipsIncompatibleUnits(t *testing.T) {
+	report := ArtifactAuditReport{}
+	run := FoodRunArtifact{QuantityLedger: &QuantityLedger{
+		Requirements: []IngredientRequirement{{
+			RequirementID:        "req-1",
+			IngredientName:       "onion",
+			ShopRequiredQuantity: &NormalizedQuantity{BaseValue: 1, BaseUnit: "unit"},
+		}},
+		Allocations: []IngredientProductAllocation{{
+			RequirementID:        "req-1",
+			MatchType:            "exact",
+			ShopRequiredQuantity: &NormalizedQuantity{BaseValue: 1, BaseUnit: "unit"},
+			PurchasedQuantity:    &QuantityRange{Expected: NormalizedQuantity{BaseValue: 2000, BaseUnit: "g"}},
+			PackageCount:         1,
+		}},
+	}}
+	auditLedgerConsistency(&report, run)
+	if hasAuditIssue(report, "ledger_purchased_covers_shop_required") {
+		t.Fatalf("incompatible-unit review line should not fail coverage audit: %+v", report.BlockingIssues)
+	}
+}
+
+func TestArtifactAuditLedgerCoverageCheckFailsSameUnitShortfall(t *testing.T) {
+	report := ArtifactAuditReport{}
+	run := FoodRunArtifact{QuantityLedger: &QuantityLedger{
+		Requirements: []IngredientRequirement{{
+			RequirementID:        "req-1",
+			IngredientName:       "rice",
+			ShopRequiredQuantity: &NormalizedQuantity{BaseValue: 300, BaseUnit: "g"},
+		}},
+		Allocations: []IngredientProductAllocation{{
+			RequirementID:        "req-1",
+			MatchType:            "exact",
+			ShopRequiredQuantity: &NormalizedQuantity{BaseValue: 300, BaseUnit: "g"},
+			PurchasedQuantity:    &QuantityRange{Expected: NormalizedQuantity{BaseValue: 100, BaseUnit: "g"}},
+			PackageCount:         1,
+		}},
+	}}
+	auditLedgerConsistency(&report, run)
+	if !hasAuditIssue(report, "ledger_purchased_covers_shop_required") {
+		t.Fatalf("same-unit shortfall should fail coverage audit: %+v", report.Checks)
+	}
+}
+
 func TestArtifactAuditUnsafeBasketRejectsActionableLines(t *testing.T) {
 	run := auditTestRun(t)
 	run.ReadinessGate.SafeToBuild = false

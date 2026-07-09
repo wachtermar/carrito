@@ -69,6 +69,9 @@ func queryRecipes(db *sql.DB, query RecipeQuery) ([]Recipe, error) {
 	if len(recipes) == 0 && strings.TrimSpace(query.Query) == "" && len(query.Tags) == 0 && len(query.Diets) == 0 && len(query.Allergies) == 0 && len(query.Dislikes) == 0 {
 		return nil, errors.New("recipe library is empty")
 	}
+	if recipes == nil {
+		recipes = []Recipe{}
+	}
 	return recipes, nil
 }
 
@@ -282,7 +285,7 @@ func nullFloat(value sql.NullFloat64) float64 {
 
 func dietTagKeys(diet string) []string {
 	switch normalizeKey(diet) {
-	case "":
+	case "", "omnivore", "omnivoro", "omnivora", "no-restriction", "no-restrictions", "none":
 		return nil
 	case "vegetarian", "vegetariano", "vegetariana":
 		return []string{"vegetarian", "vegan"}

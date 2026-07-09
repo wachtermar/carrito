@@ -39,6 +39,11 @@ func runFoodCook(args []string, stdout, stderr io.Writer) error {
 	if err := food.SavePantry(pantry); err != nil {
 		return err
 	}
+	pantry, err = food.LoadPantry()
+	if err != nil {
+		return err
+	}
+	result.Pantry = pantry
 	if err := food.AppendHistory(food.HistoryEventForCook(result)); err != nil {
 		return err
 	}
@@ -104,6 +109,11 @@ func runFoodReceive(args []string, stdout, stderr io.Writer) error {
 	if err := food.SavePantry(pantry); err != nil {
 		return err
 	}
+	pantry, err = food.LoadPantry()
+	if err != nil {
+		return err
+	}
+	result.Pantry = pantry
 	if err := food.AppendHistory(food.HistoryEventForReceive(result)); err != nil {
 		return err
 	}
@@ -251,10 +261,14 @@ func runFoodStaples(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if *jsonOut {
-			return output.JSON(stdout, profile.Staples)
+		staples := profile.Staples
+		if staples == nil {
+			staples = []food.Staple{}
 		}
-		printStaples(stdout, profile.Staples)
+		if *jsonOut {
+			return output.JSON(stdout, staples)
+		}
+		printStaples(stdout, staples)
 		return nil
 	case "add":
 		return runFoodStaplesAdd(args[1:], stdout, stderr)

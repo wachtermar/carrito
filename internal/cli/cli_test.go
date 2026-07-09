@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/wachtermar/carrito/internal/config"
@@ -173,6 +174,19 @@ func TestCartGetReturnsNormalizedSummary(t *testing.T) {
 	}
 	if item.ImageURL != server.URL+"/images/eggs.jpg" {
 		t.Fatalf("image URL = %q", item.ImageURL)
+	}
+}
+
+func TestCartGetRequiresImportedSession(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+
+	var stdout, stderr bytes.Buffer
+	err := Run([]string{"cart", "get", "--json"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatalf("expected cart get to require a session, stdout=%s stderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(err.Error(), "cart reads require an Alcampo session") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

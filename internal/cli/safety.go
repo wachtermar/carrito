@@ -23,6 +23,16 @@ func requireWriteSession(cfg *config.Config) error {
 	return nil
 }
 
+func requireReadSession(cfg *config.Config, scope string) error {
+	if cfg.Auth.Cookie == "" && cfg.Auth.BearerToken == "" {
+		if strings.TrimSpace(scope) == "" {
+			scope = "authenticated reads"
+		}
+		return fmt.Errorf("%s require an Alcampo session; run login-web, login, import-har, or import-curl from your own logged-in session", scope)
+	}
+	return nil
+}
+
 func verifiedCartTotal(ctx context.Context, client *alcampo.Client) (any, int64, error) {
 	cart, err := client.Cart(ctx, true)
 	if err != nil {

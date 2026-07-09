@@ -123,6 +123,61 @@ func TestRecoverFoodRunRejectsMincedBeefForBeefStrips(t *testing.T) {
 	}
 }
 
+func TestRecoverFoodRunRejectsPetFoodForBeefStrips(t *testing.T) {
+	available := true
+	plan := recoveryTestMealPlan()
+	shop := ShopResult{
+		Complete: false,
+		SelectedProducts: []SelectedProduct{{
+			Ingredient: plan.RequiredPurchases[0],
+			Error:      "no products found",
+		}},
+	}
+	artifact := NewFoodRunArtifact(plan, shop, "", "basket.txt", []string{"dinner"})
+	ledger := BuildQuantityLedger(plan, shop, QuantityLedgerOptions{})
+	safety := BasketSafetyFromLedger(ledger, QuantityLedgerOptions{})
+	artifact.QuantityLedger = &ledger
+	artifact.BasketSafety = &safety
+	client := &recoveryTestClient{defaultProducts: []alcampo.Product{{
+		ID:        "dog-snack-id",
+		SKU:       "495007",
+		Name:      "CANES JON Nature Snaks en tiras para perro con de sabor a ternera 80 g",
+		Category:  "Mascotas",
+		Size:      "80 g",
+		Price:     money.Money{Amount: "1.89", Currency: "EUR", Cents: 189},
+		Available: &available,
+	}}}
+
+	recovered := RecoverFoodRun(context.Background(), artifact, client, RecoveryOptions{
+		Enabled:       true,
+		Policy:        PolicyBalanced,
+		SearchLimit:   4,
+		MaxSearches:   8,
+		LedgerOptions: QuantityLedgerOptions{},
+	})
+
+	if recovered.RecoveryPlan == nil || recovered.RecoveryPlan.Status != RecoveryStatusFailed {
+		t.Fatalf("recovery should fail: %+v", recovered.RecoveryPlan)
+	}
+	if recovered.QuantityLedger == nil || recovered.QuantityLedger.Status != LedgerIncomplete {
+		t.Fatalf("final ledger should remain incomplete: %+v", recovered.QuantityLedger)
+	}
+	if recovered.BasketSafety == nil || recovered.BasketSafety.SafeToBuild {
+		t.Fatalf("failed recovery should not be basket-safe: %+v", recovered.BasketSafety)
+	}
+	foundPetRejection := false
+	for _, attempt := range recovered.RecoveryPlan.Attempts {
+		for _, candidate := range attempt.Candidates {
+			if strings.Contains(strings.Join(candidate.RejectReasons, " "), "pet or non-human food") {
+				foundPetRejection = true
+			}
+		}
+	}
+	if !foundPetRejection {
+		t.Fatalf("expected pet-food rejection to be recorded: %+v", recovered.RecoveryPlan.Attempts)
+	}
+}
+
 func recoveryTestMealPlan() MealPlan {
 	return MealPlan{
 		People: 2,

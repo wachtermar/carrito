@@ -94,9 +94,12 @@ func LoadPantry() (Pantry, error) {
 	var p Pantry
 	if err := readJSONFile(path, &p); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return Pantry{}, nil
+			return Pantry{Items: []PantryItem{}}, nil
 		}
 		return Pantry{}, err
+	}
+	if p.Items == nil {
+		p.Items = []PantryItem{}
 	}
 	return p, nil
 }

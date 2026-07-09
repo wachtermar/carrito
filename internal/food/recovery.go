@@ -263,7 +263,7 @@ func recoveryCandidateFromSelection(issue RecoveryIssue, query string, selection
 		Confidence:    "rejected",
 	}
 	if selection.Error != "" {
-		candidate.RejectReasons = append(candidate.RejectReasons, selection.Error)
+		candidate.RejectReasons = selectedProductRejectReasons(selection)
 		return candidate
 	}
 	ev := productEvidenceFromSelection(selection)
@@ -282,8 +282,24 @@ func recoveryCandidateFromSelection(issue RecoveryIssue, query string, selection
 	return candidate
 }
 
+func selectedProductRejectReasons(selection SelectedProduct) []string {
+	reasons := []string{}
+	if strings.TrimSpace(selection.Error) != "" {
+		reasons = append(reasons, selection.Error)
+	}
+	for _, alternate := range selection.Alternates {
+		if strings.TrimSpace(alternate.RejectedReason) != "" {
+			reasons = append(reasons, alternate.RejectedReason)
+		}
+	}
+	return dedupeStrings(reasons)
+}
+
 func recoveryCompatibility(issue RecoveryIssue, query string, product ProductSummary, rule recoveryAliasRule) (string, []string, []string, []RecipeChange) {
 	text := normalizeKey(strings.Join([]string{query, product.Name, product.Brand, product.Category, product.Allergens}, " "))
+	if reason := nonHumanFoodRejectedReason(text); reason != "" {
+		return "rejected", nil, []string{reason}, nil
+	}
 	for _, reject := range rule.RejectTerms {
 		if strings.Contains(text, normalizeKey(reject)) {
 			return "rejected", nil, []string{"semantic mismatch for " + issue.IngredientName + ": " + reject}, nil

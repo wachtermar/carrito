@@ -347,6 +347,9 @@ func optimizationCandidateFromSelection(id, source, query string, req Ingredient
 
 func semanticMatchEvidence(ingredient Ingredient, product ProductSummary, profile Profile) SemanticMatchEvidence {
 	text := normalizeKey(strings.Join([]string{product.Name, product.Brand, product.Category, product.Allergens}, " "))
+	if reason := nonHumanFoodRejectedReason(text); reason != "" {
+		return SemanticMatchEvidence{Status: "mismatch", Confidence: 0, RejectReason: reason}
+	}
 	if productDietRejectedReason(text, profile.Diets) != "" || containsAny(text, profile.Allergies) || containsAny(text, profile.Dislikes) {
 		return SemanticMatchEvidence{Status: "mismatch", Confidence: 0, RejectReason: "conflicts with saved diet, allergy, or dislike rules"}
 	}

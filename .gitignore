@@ -15,3 +15,5 @@ basket.txt
 *-shop.json
 .devspace/
 .hermes-output/
+.gstack/
+.tmp/

@@ -58,6 +58,9 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 		for _, mealType := range opts.MealTypes {
 			trimmedMealType := strings.TrimSpace(mealType)
 			candidates := templatesForMealType(templates, trimmedMealType)
+			if len(candidates) == 0 {
+				return MealPlan{}, fmt.Errorf("no recipe templates fit requested meal type %q and current profile constraints", trimmedMealType)
+			}
 			mealKey := normalizeMealType(trimmedMealType)
 			template := candidates[recipeIndexes[mealKey]%len(candidates)]
 			recipeIndexes[mealKey]++
@@ -91,8 +94,8 @@ func GenerateMealPlan(profile Profile, pantry Pantry, opts PlanOptions) (MealPla
 }
 
 func templatesForMealType(templates []Recipe, mealType string) []Recipe {
-	mealKey := normalizeMealType(mealType)
-	if mealKey == "" {
+	mealKey, known := canonicalMealType(mealType)
+	if mealKey == "" || !known {
 		return templates
 	}
 	var out []Recipe
@@ -104,22 +107,26 @@ func templatesForMealType(templates []Recipe, mealType string) []Recipe {
 			}
 		}
 	}
-	if len(out) == 0 {
-		return templates
-	}
 	return out
 }
 
 func normalizeMealType(value string) string {
+	if mealType, ok := canonicalMealType(value); ok {
+		return mealType
+	}
+	return normalizeKey(value)
+}
+
+func canonicalMealType(value string) (string, bool) {
 	switch normalizeKey(value) {
 	case "breakfast", "desayuno":
-		return "breakfast"
+		return "breakfast", true
 	case "lunch", "comida", "almuerzo":
-		return "lunch"
+		return "lunch", true
 	case "dinner", "cena":
-		return "dinner"
+		return "dinner", true
 	default:
-		return normalizeKey(value)
+		return normalizeKey(value), false
 	}
 }
 

@@ -90,6 +90,37 @@ func TestGenerateMealPlanMatchesRequestedMealTypes(t *testing.T) {
 	}
 }
 
+func TestGenerateMealPlanOmnivoreDoesNotRestrictMealTypeCandidates(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	expiry := time.Now().UTC().AddDate(0, 0, 1).Format("2006-01-02")
+	plan, err := GenerateMealPlan(Profile{
+		Diets:         []string{"omnivore"},
+		LikedCuisines: []string{"mediterranean", "spanish"},
+	}, Pantry{Items: []PantryItem{
+		{Name: "chicken breast", Quantity: 350, Unit: "g", Location: "fridge", ExpiryDate: expiry},
+		{Name: "rice", Quantity: 300, Unit: "g", Location: "pantry"},
+	}}, PlanOptions{Days: 1, People: 2, MealTypes: []string{"breakfast", "lunch", "dinner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, meal := range plan.Days[0].Meals {
+		if !recipeHasTag(meal.Recipe, meal.Type) {
+			t.Fatalf("%s selected recipe %q with tags %+v", meal.Type, meal.Recipe.ID, meal.Recipe.Tags)
+		}
+	}
+}
+
+func TestTemplatesForKnownMealTypeDoNotFallbackToWrongSlot(t *testing.T) {
+	candidates := templatesForMealType([]Recipe{{
+		ID:    "dinner-only",
+		Title: "Dinner Only",
+		Tags:  []string{"dinner"},
+	}}, "breakfast")
+	if len(candidates) != 0 {
+		t.Fatalf("breakfast candidates fell back to dinner recipes: %+v", candidates)
+	}
+}
+
 func TestGenerateMealPlanRequiresPeopleWhenProfileMissing(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	_, err := GenerateMealPlan(Profile{}, Pantry{}, PlanOptions{Days: 1, MealTypes: []string{"dinner"}})
@@ -329,6 +360,26 @@ func TestSelectProductRejectsDietConflictsAndHidesRejectedAlternates(t *testing.
 		if containsAnyKey(text, vegetarianForbiddenKeys) {
 			t.Fatalf("diet-conflicting alternate leaked: %+v", alternate)
 		}
+	}
+}
+
+func TestSelectProductRejectsPetFoodForHumanIngredient(t *testing.T) {
+	available := true
+	selection := SelectProduct(Ingredient{Name: "beef strips", Quantity: 300, Unit: "g", Category: "meat", SearchTerm: "ternera tiras"}, []alcampo.Product{{
+		ID:        "dog-snack-id",
+		SKU:       "495007",
+		Name:      "CANES JON Nature Snaks en tiras para perro con de sabor a ternera 80 g",
+		Category:  "Mascotas",
+		Size:      "80 g",
+		Price:     money.Money{Amount: "1.89", Currency: "EUR", Cents: 189},
+		UnitPrice: money.Money{Amount: "23.63", Currency: "EUR", Cents: 2363},
+		Available: &available,
+	}}, Profile{}, PolicyBalanced)
+	if selection.Error == "" {
+		t.Fatalf("pet food should not satisfy a human ingredient: %+v", selection)
+	}
+	if len(selection.Alternates) == 0 || !strings.Contains(selection.Alternates[0].RejectedReason, "pet or non-human food") {
+		t.Fatalf("expected pet-food rejection reason, got %+v", selection.Alternates)
 	}
 }
 

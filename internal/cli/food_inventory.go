@@ -98,6 +98,10 @@ func runFoodProfileSet(args []string, stdout, stderr io.Writer) error {
 	if err := food.SaveProfile(profile); err != nil {
 		return err
 	}
+	profile, err = food.LoadProfile()
+	if err != nil {
+		return err
+	}
 	if *jsonOut {
 		return output.JSON(stdout, profile)
 	}
@@ -180,6 +184,10 @@ func runFoodPantrySet(action string, args []string, stdout, stderr io.Writer) er
 	if err := food.SavePantry(pantry); err != nil {
 		return err
 	}
+	pantry, err = food.LoadPantry()
+	if err != nil {
+		return err
+	}
 	res := struct {
 		Action string          `json:"action"`
 		Item   food.PantryItem `json:"item"`
@@ -213,6 +221,10 @@ func runFoodPantryUse(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	if err := food.SavePantry(pantry); err != nil {
+		return err
+	}
+	pantry, err = food.LoadPantry()
+	if err != nil {
 		return err
 	}
 	res := struct {
