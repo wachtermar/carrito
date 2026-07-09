@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -149,6 +150,7 @@ func runFoodRecipesShow(args []string, stdout, stderr io.Writer) error {
 func runFoodRecipesAdd(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("food recipes add", stderr)
 	fromText := fs.Bool("from-text", false, "parse a free-text ingredient list instead of JSON")
+	urlImport := fs.String("url", "", "import a schema.org Recipe JSON-LD webpage")
 	id := fs.String("id", "", "recipe id for --from-text")
 	title := fs.String("title", "", "recipe title for --from-text")
 	servings := fs.Int("servings", 2, "recipe servings for --from-text")
@@ -157,22 +159,39 @@ func runFoodRecipesAdd(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	ref := strings.TrimSpace(strings.Join(fs.Args(), " "))
-	if ref == "" {
+	if strings.TrimSpace(*urlImport) != "" && *fromText {
+		return errors.New("food recipes add --url cannot be combined with --from-text")
+	}
+	if strings.TrimSpace(*urlImport) != "" && ref != "" {
+		return errors.New("food recipes add --url does not accept a file argument")
+	}
+	if ref == "" && strings.TrimSpace(*urlImport) == "" {
 		return errors.New("food recipes add requires <file|->")
 	}
-	data, err := readInputBytes(ref)
-	if err != nil {
-		return err
-	}
 	var recipes []food.Recipe
+	var source food.RecipeSourceEvidence
+	var warnings []string
+	var err error
 	if *fromText {
+		data, err := readInputBytes(ref)
+		if err != nil {
+			return err
+		}
 		recipe, err := food.RecipeFromText(string(data), food.TextRecipeOptions{ID: *id, Title: *title, Servings: *servings})
 		if err != nil {
 			return fmt.Errorf("%w; %s", err, food.TextRecipeUsage())
 		}
 		recipes = []food.Recipe{recipe}
+	} else if strings.TrimSpace(*urlImport) != "" {
+		recipes, source, warnings, err = food.RecipesFromStructuredURL(context.Background(), *urlImport, food.RecipeIntakeOptions{})
+		if err != nil {
+			return err
+		}
 	} else {
-		var err error
+		data, err := readInputBytes(ref)
+		if err != nil {
+			return err
+		}
 		recipes, err = food.DecodeRecipes(data)
 		if err != nil {
 			return err
@@ -182,11 +201,17 @@ func runFoodRecipesAdd(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	var sourceOut *food.RecipeSourceEvidence
+	if source.SourceID != "" {
+		sourceOut = &source
+	}
 	res := struct {
-		Action  string        `json:"action"`
-		Recipes []food.Recipe `json:"recipes"`
-		Paths   []string      `json:"paths"`
-	}{Action: "add", Recipes: recipes, Paths: paths}
+		Action   string                     `json:"action"`
+		Recipes  []food.Recipe              `json:"recipes"`
+		Paths    []string                   `json:"paths"`
+		Source   *food.RecipeSourceEvidence `json:"source,omitempty"`
+		Warnings []string                   `json:"warnings,omitempty"`
+	}{Action: "add", Recipes: recipes, Paths: paths, Source: sourceOut, Warnings: warnings}
 	if *jsonOut {
 		return output.JSON(stdout, res)
 	}

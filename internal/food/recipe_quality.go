@@ -458,6 +458,9 @@ func loadStructuredRecipeURL(ctx context.Context, rawURL string, opts RecipeInta
 	}
 	for i := range recipes {
 		recipes[i] = normalizeRecipe(recipes[i])
+		if strings.TrimSpace(recipes[i].SourceURL) == "" {
+			recipes[i].SourceURL = strings.TrimSpace(rawURL)
+		}
 		if strings.TrimSpace(recipes[i].ID) == "" {
 			recipes[i].ID = recipeSlug(strutilRecipeTitle(recipes[i], "url", i+1))
 		}
@@ -471,6 +474,11 @@ func loadStructuredRecipeURL(ctx context.Context, rawURL string, opts RecipeInta
 		source.BaseServings = recipes[0].Servings
 	}
 	return recipes, source, warnings, nil
+}
+
+func RecipesFromStructuredURL(ctx context.Context, rawURL string, opts RecipeIntakeOptions) ([]Recipe, RecipeSourceEvidence, []string, error) {
+	opts = normalizeRecipeIntakeOptions(opts)
+	return loadStructuredRecipeURL(ctx, rawURL, opts)
 }
 
 func recipesFromJSONLD(body []byte, baseURL string) ([]Recipe, []string, error) {
@@ -572,6 +580,7 @@ func recipeFromSchemaOrgNode(node map[string]any, baseURL string) (Recipe, []str
 		Title:       title,
 		Servings:    servings,
 		Tags:        []string{"url-import", "structured"},
+		SourceURL:   firstNonEmptyString(resolveURLRef(stringFromAny(node["url"]), baseURL), baseURL),
 		ImageURL:    imageURL,
 		Ingredients: ingredients,
 		Steps:       steps,
@@ -669,14 +678,14 @@ func ingredientFromStructuredText(raw string) Ingredient {
 	}
 	if m := textIngredientRE.FindStringSubmatch(part); len(m) == 4 {
 		qty, _ := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", "."), 64)
-		unit := normalizeUnit(m[2])
+		qty, unit := normalizeRecipeIngredientQuantity(qty, m[2])
 		if unit == "" {
 			unit = "unit"
 		}
-		name := strings.TrimSpace(m[3])
+		name := cleanIngredientName(m[3])
 		return Ingredient{Name: name, Quantity: roundQty(qty), Unit: unit, Category: inferIngredientCategory(name), SearchTerm: spanishSearchTerm(name)}
 	}
-	name := strings.Trim(part, ".: ")
+	name := cleanIngredientName(part)
 	return Ingredient{Name: name, Category: inferIngredientCategory(name), SearchTerm: spanishSearchTerm(name)}
 }
 

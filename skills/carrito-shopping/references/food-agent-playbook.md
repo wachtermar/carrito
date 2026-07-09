@@ -139,7 +139,7 @@ Use local JSON memory to reduce future questions:
 - Save household defaults with `food profile set`.
 - Save repeat essentials with `food staples add <item> --min <qty> --unit <unit> --search <term>`.
 - Save pantry/fridge/freezer facts with `food pantry add|update`.
-- Save custom recipes with `food recipes add <file|-> --json` or `food recipes add <file|-> --from-text --title <title> --json`.
+- Save custom recipes with `food recipes add <file|-> --json`, `food recipes add --url <recipe-page-url> --json` for schema.org Recipe JSON-LD pages, or `food recipes add <file|-> --from-text --title <title> --json`.
 - Use `food profile set --nutrition-goals "kcal<=2200,protein>=90"` when the user provides nutrition targets.
 - Save product feedback with `food profile set --liked-products <sku-or-name>` or `--rejected-products <sku-or-name>` when a user rejects or asks to repeat a product.
 - After a completed shop, prefer `food receive` over manual pantry edits so package quantities, pantry, and history update together.

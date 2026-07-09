@@ -35,6 +35,7 @@ func migrateRecipeDB(db *sql.DB) error {
 			prep_minutes INTEGER NOT NULL DEFAULT 0,
 			cook_minutes INTEGER NOT NULL DEFAULT 0,
 			image_url TEXT NOT NULL DEFAULT '',
+			source_url TEXT NOT NULL DEFAULT '',
 			source TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
@@ -101,7 +102,36 @@ func migrateRecipeDB(db *sql.DB) error {
 			return err
 		}
 	}
+	if err := ensureRecipeColumn(db, "source_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	return setRecipeMeta(db, "schema_version", "1")
+}
+
+func ensureRecipeColumn(db *sql.DB, column, definition string) error {
+	rows, err := db.Query(`PRAGMA table_info(recipes)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(`ALTER TABLE recipes ADD COLUMN ` + column + ` ` + definition)
+	return err
 }
 
 func recipeMetaValue(db *sql.DB, key string) (string, error) {

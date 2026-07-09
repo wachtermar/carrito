@@ -119,6 +119,7 @@ func printFoodHelp(w io.Writer) {
 	fmt.Fprintln(w, "  carrito food recipes search <query> [--tag TAG] [--diet DIET] [--profile] [--limit N] [--json]")
 	fmt.Fprintln(w, "  carrito food recipes show <id-or-title> [--json]")
 	fmt.Fprintln(w, "  carrito food recipes add <file|-> [--json]")
+	fmt.Fprintln(w, "  carrito food recipes add --url <recipe-page-url> [--json]")
 	fmt.Fprintln(w, "  carrito food recipes add <file|-> --from-text [--title TITLE] [--servings N] [--json]")
 	fmt.Fprintln(w, "  carrito food recipes remove <id-or-title> [--json]")
 	fmt.Fprintln(w, "  carrito food shop <mealplan-id-or-file> [--selection-policy POLICY] [--basket-out basket.txt] [--json]")

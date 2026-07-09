@@ -663,7 +663,7 @@ func TestWritePDFFromJSONFileFoodRunArtifactIncludesMealPlanAndShop(t *testing.T
 						Ingredients: []Ingredient{{Name: "rice", Quantity: 180, Unit: "g"}},
 						Steps: []RecipeStep{
 							{Number: 1, Text: "Cook the rice."},
-							{Number: 2, Text: "Serve hot."},
+							{Number: 2, Text: "Saut\u00e9 the vegetables, then serve hot."},
 						},
 						NutritionPerServing: &NutritionSummary{Kcal: 400, ProteinG: 12, CarbsG: 70, FatG: 8},
 					},
@@ -716,11 +716,13 @@ func TestWritePDFFromJSONFileFoodRunArtifactIncludesMealPlanAndShop(t *testing.T
 		t.Fatal(err)
 	}
 	for _, want := range []string{
+		"Cooking plan:",
 		"Day 1",
 		"Dinner: Test Dinner",
 		"Ingredients:",
 		"Cooking instructions:",
 		"1. Cook the rice.",
+		"2. Saute the vegetables, then serve hot.",
 		"Selected products:",
 		"Selected-product nutrition coverage: 1 of 1 ingredients",
 		"Nutrition: Alcampo label, per 100 g",
@@ -737,6 +739,11 @@ func TestWritePDFFromJSONFileFoodRunArtifactIncludesMealPlanAndShop(t *testing.T
 	if !bytes.Contains(pdfData, []byte("/Subtype /Image")) {
 		t.Fatalf("PDF did not embed run artifact images")
 	}
+	title, lines := pdfLinesForFoodRunArtifact(artifact)
+	if title != "Test Dinner" {
+		t.Fatalf("single-recipe food run title = %q, want recipe title", title)
+	}
+	assertSectionOrder(t, lines, "Cooking plan:", "Day-by-day meal plan:", "Ingredients to buy:", "Shopping and budget:", "Selected products:", "Basket safety:", "Technical readiness and evidence:")
 }
 
 func TestFoodRunArtifactRendererMakesIncompleteShoppingLoud(t *testing.T) {
@@ -784,7 +791,7 @@ func TestFoodRunArtifactRendererMakesIncompleteShoppingLoud(t *testing.T) {
 			t.Fatalf("renderer missing %q\n%s", want, text)
 		}
 	}
-	assertSectionOrder(t, lines, "Summary:", "Day-by-day meal plan:", "Ingredients to buy:", "Selected products:", "Basket safety:")
+	assertSectionOrder(t, lines, "Cooking plan:", "Day-by-day meal plan:", "Ingredients to buy:", "Shopping and budget:", "Selected products:", "Basket safety:")
 }
 
 func TestWritePDFFromJSONFileDispatchesPlanShopRunAndRejectsUnknown(t *testing.T) {

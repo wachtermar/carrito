@@ -46,10 +46,10 @@ func upsertRecipeTx(tx *sql.Tx, recipe Recipe, source string) error {
 	_, err := tx.Exec(`
 		INSERT INTO recipes (
 			id, id_key, title, title_key, servings, prep_minutes, cook_minutes, image_url,
-			source, created_at, updated_at, nutrition_kcal, nutrition_protein_g,
+			source_url, source, created_at, updated_at, nutrition_kcal, nutrition_protein_g,
 			nutrition_carbs_g, nutrition_fat_g
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id_key) DO UPDATE SET
 			id = excluded.id,
 			title = excluded.title,
@@ -58,6 +58,7 @@ func upsertRecipeTx(tx *sql.Tx, recipe Recipe, source string) error {
 			prep_minutes = excluded.prep_minutes,
 			cook_minutes = excluded.cook_minutes,
 			image_url = excluded.image_url,
+			source_url = excluded.source_url,
 			source = excluded.source,
 			updated_at = excluded.updated_at,
 			nutrition_kcal = excluded.nutrition_kcal,
@@ -65,7 +66,7 @@ func upsertRecipeTx(tx *sql.Tx, recipe Recipe, source string) error {
 			nutrition_carbs_g = excluded.nutrition_carbs_g,
 			nutrition_fat_g = excluded.nutrition_fat_g`,
 		recipe.ID, idKey, recipe.Title, normalizeKey(recipe.Title), recipe.Servings,
-		recipe.PrepMinutes, recipe.CookMinutes, recipe.ImageURL, source, now, now,
+		recipe.PrepMinutes, recipe.CookMinutes, recipe.ImageURL, recipe.SourceURL, source, now, now,
 		kcal, protein, carbs, fat)
 	if err != nil {
 		return err

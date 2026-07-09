@@ -13,7 +13,11 @@ type TextRecipeOptions struct {
 	Servings int
 }
 
-var textIngredientRE = regexp.MustCompile(`(?i)^\s*(\d+(?:[,.]\d+)?)(?:\s*(kg|g|gr|l|ml|cl|ud|uds|unit|unidades|unidad))?\s+(.+)$`)
+var (
+	textIngredientRE              = regexp.MustCompile(`(?i)^\s*(\d+(?:[,.]\d+)?)(?:\s*(kg|g|gr|l|ml|cl|ud|uds|unit|units|unidades|unidad|oz\.?|ounce|ounces|lb|lbs|pound|pounds|tsp\.?|teaspoon|teaspoons|tbsp\.?|tablespoon|tablespoons|cup|cups))?\s+(.+)$`)
+	ingredientPriceNoteRE         = regexp.MustCompile(`(?i)\s*(?:\(\s*(?:[$]|\x{20AC}|\x{00A3})?\s*\d+(?:[.,]\d+)?\s*(?:(?:[$]|\x{20AC}|\x{00A3})|eur|euros|usd|dollars)?\s*\)|(?:[$]|\x{20AC}|\x{00A3})\s*\d+(?:[.,]\d+)?)\s*$`)
+	ingredientSearchPackageSizeRE = regexp.MustCompile(`^\d+(?:[,.]\d+)?\s*(?:oz|ounce|ounces|g|gr|kg|ml|cl|l)\s*(?:can|cans|pkg|package|jar|bag|bottle|tin)?\s+`)
+)
 
 func RecipeFromText(text string, opts TextRecipeOptions) (Recipe, error) {
 	servings := opts.Servings
@@ -84,12 +88,13 @@ func ingredientFromText(raw string) (Ingredient, bool) {
 		if value, err := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", "."), 64); err == nil && value > 0 {
 			qty = value
 		}
-		if parsedUnit := normalizeUnit(m[2]); parsedUnit != "" {
+		if parsedQty, parsedUnit := normalizeRecipeIngredientQuantity(qty, m[2]); parsedUnit != "" {
+			qty = parsedQty
 			unit = parsedUnit
 		}
 		name = strings.TrimSpace(m[3])
 	}
-	name = strings.Trim(name, ".: ")
+	name = cleanIngredientName(name)
 	if name == "" {
 		return Ingredient{}, false
 	}
@@ -100,6 +105,39 @@ func ingredientFromText(raw string) (Ingredient, bool) {
 		Category:   inferIngredientCategory(name),
 		SearchTerm: spanishSearchTerm(name),
 	}, true
+}
+
+func cleanIngredientName(name string) string {
+	name = strings.TrimSpace(strings.Trim(name, ".: "))
+	for {
+		cleaned := strings.TrimSpace(ingredientPriceNoteRE.ReplaceAllString(name, ""))
+		if cleaned == name {
+			break
+		}
+		name = cleaned
+	}
+	name = strings.TrimSpace(strings.TrimRight(name, "*# "))
+	return strings.Trim(name, ".: ")
+}
+
+func normalizeRecipeIngredientQuantity(qty float64, rawUnit string) (float64, string) {
+	unit := strings.Trim(strings.ToLower(strings.TrimSpace(rawUnit)), ".")
+	switch unit {
+	case "":
+		return qty, ""
+	case "oz", "ounce", "ounces":
+		return qty * 28.349523125, "g"
+	case "lb", "lbs", "pound", "pounds":
+		return qty * 453.59237, "g"
+	case "tsp", "teaspoon", "teaspoons":
+		return qty, "tsp"
+	case "tbsp", "tablespoon", "tablespoons":
+		return qty, "tbsp"
+	case "cup", "cups":
+		return qty, "cup"
+	default:
+		return qty, normalizeUnit(unit)
+	}
 }
 
 func looksLikeRecipeTitle(part string) bool {
@@ -125,10 +163,15 @@ func recipeSlug(title string) string {
 
 func spanishSearchTerm(name string) string {
 	key := normalizeKey(name)
+	key = strings.TrimSpace(ingredientSearchPackageSizeRE.ReplaceAllString(key, ""))
+	if alias := englishIngredientSearchAlias(key); alias != "" {
+		return alias
+	}
 	var terms []string
 	stop := map[string]bool{
 		"de": true, "del": true, "la": true, "el": true, "los": true, "las": true,
 		"un": true, "una": true, "y": true, "para": true, "fresco": true, "fresca": true,
+		"can": true, "cans": true, "pkg": true, "package": true, "jar": true, "bag": true, "bottle": true, "tin": true,
 	}
 	for _, field := range strings.Fields(key) {
 		if stop[field] {
@@ -140,6 +183,40 @@ func spanishSearchTerm(name string) string {
 		return key
 	}
 	return strings.Join(terms, " ")
+}
+
+func englishIngredientSearchAlias(key string) string {
+	rules := []struct {
+		needles []string
+		term    string
+	}{
+		{[]string{"pinto bean"}, "alubias pintas"},
+		{[]string{"black bean"}, "frijoles negros"},
+		{[]string{"white bean"}, "alubias blancas"},
+		{[]string{"kidney bean"}, "alubias rojas"},
+		{[]string{"chickpea"}, "garbanzos cocidos"},
+		{[]string{"flour tortilla", "tortilla wrap"}, "tortillas trigo"},
+		{[]string{"cheddar cheese"}, "queso cheddar"},
+		{[]string{"spanish rice", "rice packet"}, "arroz"},
+		{[]string{"rotel", "diced tomato"}, "tomate troceado"},
+		{[]string{"frozen vegetable", "mixed vegetable"}, "verduras congeladas"},
+		{[]string{"seasoning", "spice blend"}, "especias"},
+		{[]string{"chicken breast"}, "pechuga de pollo"},
+		{[]string{"bell pepper", "red pepper", "green pepper"}, "pimiento"},
+		{[]string{"tomato sauce"}, "tomate frito"},
+		{[]string{"tomato"}, "tomate"},
+		{[]string{"onion"}, "cebolla"},
+		{[]string{"rice"}, "arroz"},
+		{[]string{"corn"}, "maiz"},
+	}
+	for _, rule := range rules {
+		for _, needle := range rule.needles {
+			if strings.Contains(key, needle) {
+				return rule.term
+			}
+		}
+	}
+	return ""
 }
 
 func singularSpanish(value string) string {

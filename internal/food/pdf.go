@@ -23,6 +23,8 @@ import (
 	"github.com/wachtermar/carrito/internal/strutil"
 )
 
+const pdfPageBreakLine = "\f"
+
 func WritePDFFromJSONFile(inputPath, outputPath string) error {
 	data, err := os.ReadFile(inputPath)
 	if err != nil {
@@ -179,30 +181,72 @@ func pdfLinesForMealPlan(plan MealPlan) (string, []string) {
 }
 
 func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
-	title := "Alcampo Meal Plan & Shopping List"
+	title := foodRunPDFTitle(artifact)
 	plan := artifact.MealPlan
 	shop := artifact.Shop
 	lines := []string{
-		"Summary:",
+		"Cooking plan:",
 		fmt.Sprintf("People: %d", plan.People),
 		fmt.Sprintf("Days: %d", len(plan.Days)),
-		"Selection policy: " + strutil.FirstNonEmpty(plan.SelectionPolicy, shop.Policy, "not set"),
-		"Budget: " + strutil.FirstNonEmpty(plan.BudgetEUR, "not set"),
-		"Shopping status: " + shoppingStatusLabel(shop),
-		"Estimated shopping total: " + formatPDFMoney(shop.EstimatedTotal.Amount, shop.EstimatedTotal.Currency),
-		"Data caveat: prices, offers, stock, substitutions, and variable-weight totals can change before Alcampo confirms an order.",
-		"Safety: no order was submitted; cart and checkout writes require explicit approval and a spending guard.",
-	}
-	if missing := missingShoppingIngredients(shop); len(missing) > 0 {
-		lines = append(lines, "Missing ingredients: "+strings.Join(missing, ", "))
-		lines = append(lines, "Estimated total excludes missing or unavailable items.")
 	}
 	if len(artifact.Meals) > 0 {
 		lines = append(lines, "Meals: "+strings.Join(artifact.Meals, ", "))
 	}
+	lines = append(lines,
+		"Selection policy: "+strutil.FirstNonEmpty(plan.SelectionPolicy, shop.Policy, "not set"),
+		"Budget: "+strutil.FirstNonEmpty(plan.BudgetEUR, "not set"),
+	)
+	if missing := missingShoppingIngredients(shop); len(missing) > 0 {
+		lines = append(lines, "Missing ingredients: "+strings.Join(missing, ", "))
+		lines = append(lines, "Estimated total excludes missing or unavailable items.")
+	}
 	if plan.Nutrition != nil {
 		lines = append(lines, "Plan nutrition estimate: "+formatNutritionSummary(*plan.Nutrition))
 	}
+	lines = append(lines, "", "Day-by-day meal plan:")
+	swapsBySlot := recipeSwapsBySlot(artifact.RecipeSwapPlan)
+	for _, day := range plan.Days {
+		lines = append(lines, fmt.Sprintf("Day %d", day.Day))
+		for _, meal := range day.Meals {
+			lines = append(lines, formatMealType(meal.Type)+": "+meal.Recipe.Title)
+			if swap, ok := swapsBySlot[recipeSwapSlotKey(day.Day, meal.Type)]; ok && swap.ReplacementRecipeID == meal.Recipe.ID {
+				lines = append(lines, "Replaced original recipe: "+swap.OriginalRecipeTitle)
+			}
+			lines = append(lines, recipeSummaryLines(meal.Recipe)...)
+			if meal.PlanningReason != "" {
+				lines = append(lines, "Planning reason: "+meal.PlanningReason)
+			}
+		}
+		lines = append(lines, "")
+	}
+	lines = append(lines, pantryUsagePDFLines(plan)...)
+	lines = append(lines, pdfPageBreakLine)
+	lines = append(lines, requiredPurchasePDFLines(plan)...)
+	lines = append(lines, "", "Shopping and budget:")
+	lines = append(lines,
+		"Shopping status: "+shoppingStatusLabel(shop),
+		"Estimated shopping total: "+formatPDFMoney(shop.EstimatedTotal.Amount, shop.EstimatedTotal.Currency),
+		"Data caveat: prices, offers, stock, substitutions, and variable-weight totals can change before Alcampo confirms an order.",
+		"Safety: no order was submitted; cart and checkout writes require explicit approval and a spending guard.",
+	)
+	lines = append(lines, shopResultPDFLines(shop)...)
+	lines = append(lines, "", "Basket safety:")
+	if artifact.BasketSafety != nil {
+		lines = append(lines, "- Status: "+strings.ToUpper(string(artifact.BasketSafety.Status)))
+		lines = append(lines, "- Safe to build basket: "+fmt.Sprintf("%t", artifact.BasketSafety.SafeToBuild))
+		if artifact.BasketSafety.Reason != "" {
+			lines = append(lines, "- "+artifact.BasketSafety.Reason)
+		}
+	}
+	lines = append(lines, "- No order was submitted.")
+	lines = append(lines, "- Cart and checkout writes require explicit approval and a spending guard.")
+	if len(artifact.Warnings) > 0 {
+		lines = append(lines, "", "Warnings and caveats:")
+		for _, warning := range artifact.Warnings {
+			lines = append(lines, "- "+warning)
+		}
+	}
+	lines = append(lines, pdfPageBreakLine, "Technical readiness and evidence:")
 	if artifact.ReadinessGate != nil {
 		lines = append(lines, readinessGatePDFLines(*artifact.ReadinessGate)...)
 	}
@@ -243,45 +287,30 @@ func pdfLinesForFoodRunArtifact(artifact FoodRunArtifact) (string, []string) {
 		lines = append(lines, recoveryPlanPDFLines(*artifact.RecoveryPlan)...)
 	}
 	lines = append(lines, nutritionCoveragePDFLines(shop)...)
-	lines = append(lines, "", "Day-by-day meal plan:")
-	swapsBySlot := recipeSwapsBySlot(artifact.RecipeSwapPlan)
-	for _, day := range plan.Days {
-		lines = append(lines, fmt.Sprintf("Day %d", day.Day))
-		for _, meal := range day.Meals {
-			lines = append(lines, formatMealType(meal.Type)+": "+meal.Recipe.Title)
-			if swap, ok := swapsBySlot[recipeSwapSlotKey(day.Day, meal.Type)]; ok && swap.ReplacementRecipeID == meal.Recipe.ID {
-				lines = append(lines, "Replaced original recipe: "+swap.OriginalRecipeTitle)
-			}
-			lines = append(lines, recipeSummaryLines(meal.Recipe)...)
-			if meal.PlanningReason != "" {
-				lines = append(lines, "Planning reason: "+meal.PlanningReason)
-			}
-		}
-		lines = append(lines, "")
-	}
-	lines = append(lines, pantryUsagePDFLines(plan)...)
-	lines = append(lines, requiredPurchasePDFLines(plan)...)
 	if artifact.QuantityLedger != nil {
 		lines = append(lines, ledgerAllocationPDFLines(*artifact.QuantityLedger)...)
 	}
-	lines = append(lines, shopResultPDFLines(shop)...)
-	lines = append(lines, "", "Basket safety:")
-	if artifact.BasketSafety != nil {
-		lines = append(lines, "- Status: "+strings.ToUpper(string(artifact.BasketSafety.Status)))
-		lines = append(lines, "- Safe to build basket: "+fmt.Sprintf("%t", artifact.BasketSafety.SafeToBuild))
-		if artifact.BasketSafety.Reason != "" {
-			lines = append(lines, "- "+artifact.BasketSafety.Reason)
-		}
-	}
-	lines = append(lines, "- No order was submitted.")
-	lines = append(lines, "- Cart and checkout writes require explicit approval and a spending guard.")
-	if len(artifact.Warnings) > 0 {
-		lines = append(lines, "", "Warnings and caveats:")
-		for _, warning := range artifact.Warnings {
-			lines = append(lines, "- "+warning)
-		}
-	}
 	return title, lines
+}
+
+func foodRunPDFTitle(artifact FoodRunArtifact) string {
+	title := ""
+	count := 0
+	for _, day := range artifact.MealPlan.Days {
+		for _, meal := range day.Meals {
+			if strings.TrimSpace(meal.Recipe.Title) == "" {
+				continue
+			}
+			count++
+			if title == "" {
+				title = meal.Recipe.Title
+			}
+		}
+	}
+	if count == 1 && title != "" {
+		return title
+	}
+	return "Alcampo Meal Plan & Shopping List"
 }
 
 func readinessGatePDFLines(gate ReadinessGate) []string {
@@ -1306,10 +1335,11 @@ func formatMealType(value string) string {
 }
 
 type pdfElement struct {
-	Text     string
-	FontSize float64
-	Image    *pdfImageObject
-	Caption  string
+	Text      string
+	FontSize  float64
+	Image     *pdfImageObject
+	Caption   string
+	PageBreak bool
 }
 
 type pdfPage struct {
@@ -1341,6 +1371,10 @@ func pdfElements(title string, lines []string, imageBaseDir string) ([]pdfElemen
 	var images []pdfImageObject
 	imageByRef := make(map[string]*pdfImageObject)
 	for _, line := range lines {
+		if line == pdfPageBreakLine {
+			elements = append(elements, pdfElement{PageBreak: true})
+			continue
+		}
 		if label, ref, ok := pdfImageReference(line); ok {
 			if img, exists := imageByRef[ref]; exists {
 				elements = append(elements, pdfElement{Image: img, Caption: label})
@@ -1354,11 +1388,23 @@ func pdfElements(title string, lines []string, imageBaseDir string) ([]pdfElemen
 				continue
 			}
 		}
+		fontSize := pdfLineFontSize(line)
 		for _, wrapped := range wrapPDFLine(line, 92) {
-			elements = append(elements, pdfElement{Text: wrapped, FontSize: 12})
+			elements = append(elements, pdfElement{Text: wrapped, FontSize: fontSize})
 		}
 	}
 	return elements, images
+}
+
+func pdfLineFontSize(line string) float64 {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return 12
+	}
+	if strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "-") && !strings.Contains(trimmed, "http") {
+		return 14
+	}
+	return 12
 }
 
 func pdfImageReference(line string) (string, string, bool) {
@@ -1526,6 +1572,10 @@ func layoutPDFPages(elements []pdfElement) []pdfPage {
 		}
 	}
 	for _, el := range elements {
+		if el.PageBreak {
+			flush()
+			continue
+		}
 		if el.Image != nil {
 			width, height := fitPDFImage(el.Image, imageMaxW, imageMaxH)
 			needed := height + 22
@@ -1643,8 +1693,88 @@ func pdfContentStream(page pdfPage) string {
 }
 
 func escapePDFText(s string) string {
+	s = sanitizePDFText(s)
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, "(", `\(`)
 	s = strings.ReplaceAll(s, ")", `\)`)
 	return s
+}
+
+func sanitizePDFText(s string) string {
+	s = strings.NewReplacer(
+		"\u00a0", " ",
+		"\u00a1", "!",
+		"\u00bf", "?",
+		"\u00c0", "A",
+		"\u00c1", "A",
+		"\u00c2", "A",
+		"\u00c3", "A",
+		"\u00c4", "A",
+		"\u00c5", "A",
+		"\u00c7", "C",
+		"\u00c8", "E",
+		"\u00c9", "E",
+		"\u00ca", "E",
+		"\u00cb", "E",
+		"\u00cc", "I",
+		"\u00cd", "I",
+		"\u00ce", "I",
+		"\u00cf", "I",
+		"\u00d1", "N",
+		"\u00d2", "O",
+		"\u00d3", "O",
+		"\u00d4", "O",
+		"\u00d5", "O",
+		"\u00d6", "O",
+		"\u00d9", "U",
+		"\u00da", "U",
+		"\u00db", "U",
+		"\u00dc", "U",
+		"\u00e0", "a",
+		"\u00e1", "a",
+		"\u00e2", "a",
+		"\u00e3", "a",
+		"\u00e4", "a",
+		"\u00e5", "a",
+		"\u00e7", "c",
+		"\u00e8", "e",
+		"\u00e9", "e",
+		"\u00ea", "e",
+		"\u00eb", "e",
+		"\u00ec", "i",
+		"\u00ed", "i",
+		"\u00ee", "i",
+		"\u00ef", "i",
+		"\u00f1", "n",
+		"\u00f2", "o",
+		"\u00f3", "o",
+		"\u00f4", "o",
+		"\u00f5", "o",
+		"\u00f6", "o",
+		"\u00f9", "u",
+		"\u00fa", "u",
+		"\u00fb", "u",
+		"\u00fc", "u",
+		"\u2018", "'",
+		"\u2019", "'",
+		"\u201c", "\"",
+		"\u201d", "\"",
+		"\u2013", "-",
+		"\u2014", "-",
+		"\u2026", "...",
+	).Replace(s)
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\t':
+			b.WriteByte(' ')
+		case r >= 32 && r <= 126:
+			b.WriteRune(r)
+		case r < 32:
+			continue
+		default:
+			b.WriteByte('?')
+		}
+	}
+	return b.String()
 }

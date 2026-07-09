@@ -50,7 +50,7 @@ func loadRecipeFromDB(idOrTitle string) (Recipe, bool, error) {
 	defer db.Close()
 
 	records, err := selectRecipeRecords(db, `
-		SELECT pk, id, title, servings, prep_minutes, cook_minutes, image_url,
+		SELECT pk, id, title, servings, prep_minutes, cook_minutes, image_url, source_url,
 		       nutrition_kcal, nutrition_protein_g, nutrition_carbs_g, nutrition_fat_g
 		FROM recipes
 		WHERE id_key = ? OR title_key = ?

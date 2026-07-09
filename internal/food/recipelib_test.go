@@ -236,6 +236,75 @@ func TestRecipeDatabaseSchemaHasNormalizedTables(t *testing.T) {
 	}
 }
 
+func TestRecipeDatabaseMigrationAddsSourceURLColumn(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	dbPath, err := RecipeDBPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`
+		CREATE TABLE recipes (
+			pk INTEGER PRIMARY KEY AUTOINCREMENT,
+			id TEXT NOT NULL,
+			id_key TEXT UNIQUE NOT NULL,
+			title TEXT NOT NULL,
+			title_key TEXT NOT NULL,
+			servings INTEGER NOT NULL DEFAULT 0,
+			prep_minutes INTEGER NOT NULL DEFAULT 0,
+			cook_minutes INTEGER NOT NULL DEFAULT 0,
+			image_url TEXT NOT NULL DEFAULT '',
+			source TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			nutrition_kcal REAL,
+			nutrition_protein_g REAL,
+			nutrition_carbs_g REAL,
+			nutrition_fat_g REAL
+		);
+		INSERT INTO recipes (
+			id, id_key, title, title_key, servings, prep_minutes, cook_minutes,
+			image_url, source, created_at, updated_at
+		) VALUES (
+			'old-recipe', 'old recipe', 'Old Recipe', 'old recipe', 2, 5, 10,
+			'', 'user', '2026-07-09T00:00:00Z', '2026-07-09T00:00:00Z'
+		);
+	`)
+	closeErr := db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+
+	loaded, ok, err := LoadRecipe("old-recipe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || loaded.ID != "old-recipe" || loaded.SourceURL != "" {
+		t.Fatalf("old recipe did not load through migrated schema: ok=%t recipe=%+v", ok, loaded)
+	}
+	db, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var sourceURL string
+	if err := db.QueryRow(`SELECT source_url FROM recipes WHERE id = 'old-recipe'`).Scan(&sourceURL); err != nil {
+		t.Fatal(err)
+	}
+	if sourceURL != "" {
+		t.Fatalf("migrated source_url = %q, want empty default", sourceURL)
+	}
+}
+
 func testRecipe(id, title string) Recipe {
 	return Recipe{
 		ID:          id,

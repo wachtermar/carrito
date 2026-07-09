@@ -140,6 +140,7 @@ type Recipe struct {
 	PrepMinutes         int               `json:"prep_minutes,omitempty"`
 	CookMinutes         int               `json:"cook_minutes,omitempty"`
 	Tags                []string          `json:"tags,omitempty"`
+	SourceURL           string            `json:"source_url,omitempty"`
 	ImageURL            string            `json:"image_url,omitempty"`
 	Ingredients         []Ingredient      `json:"ingredients"`
 	Equipment           []string          `json:"equipment,omitempty"`

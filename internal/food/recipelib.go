@@ -164,6 +164,8 @@ func mergeRecipes(recipes *[]Recipe, index map[string]int, loaded []Recipe) {
 func normalizeRecipe(recipe Recipe) Recipe {
 	recipe.ID = strings.TrimSpace(recipe.ID)
 	recipe.Title = strings.TrimSpace(recipe.Title)
+	recipe.SourceURL = strings.TrimSpace(recipe.SourceURL)
+	recipe.ImageURL = strings.TrimSpace(recipe.ImageURL)
 	for i := range recipe.Tags {
 		recipe.Tags[i] = strings.TrimSpace(recipe.Tags[i])
 	}

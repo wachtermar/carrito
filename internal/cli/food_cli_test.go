@@ -266,6 +266,95 @@ func TestFoodRecipesAddFromText(t *testing.T) {
 	}
 }
 
+func TestFoodRecipesAddFromStructuredURL(t *testing.T) {
+	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/recipe":
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte(`<html><script type="application/ld+json">{
+				"@context":"https://schema.org",
+				"@type":"Recipe",
+				"name":"URL Bean Quesadillas",
+				"url":"/recipe",
+				"image":"/recipe.jpg",
+				"recipeYield":"4 servings",
+				"recipeIngredient":["425 g pinto beans","12 oz. Santa Fe Blend frozen vegetables ($1.25)","1.5 tsp Bayou Blend seasoning* ($1.25)","8 flour tortillas"],
+				"recipeInstructions":[
+					{"@type":"HowToStep","text":"Fill the tortillas."},
+					{"@type":"HowToStep","text":"Cook until crisp."}
+				]
+			}</script></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var stdout, stderr bytes.Buffer
+	sourceURL := server.URL + "/recipe"
+	if err := Run([]string{"food", "recipes", "add", "--url", sourceURL, "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var result struct {
+		Recipes []food.Recipe              `json:"recipes"`
+		Source  *food.RecipeSourceEvidence `json:"source"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Recipes) != 1 || result.Recipes[0].ID != "url-bean-quesadillas" || result.Recipes[0].SourceURL != sourceURL {
+		t.Fatalf("unexpected URL import result: %+v", result)
+	}
+	if result.Source == nil || result.Source.URL != sourceURL || result.Source.SourceType != "url" {
+		t.Fatalf("missing URL source evidence: %+v", result.Source)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "show", "url-bean-quesadillas", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("show Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var shown food.Recipe
+	if err := json.Unmarshal(stdout.Bytes(), &shown); err != nil {
+		t.Fatal(err)
+	}
+	if shown.SourceURL != sourceURL || shown.ImageURL != server.URL+"/recipe.jpg" {
+		t.Fatalf("stored recipe did not preserve provenance/image: %+v", shown)
+	}
+	if len(shown.Ingredients) != 4 {
+		t.Fatalf("stored recipe ingredients = %+v", shown.Ingredients)
+	}
+	if shown.Ingredients[1].Name != "Santa Fe Blend frozen vegetables" || shown.Ingredients[1].Unit != "g" || shown.Ingredients[1].Quantity < 339 || shown.Ingredients[1].Quantity > 341 {
+		t.Fatalf("imperial weight ingredient was not normalized cleanly: %+v", shown.Ingredients[1])
+	}
+	if strings.Contains(shown.Ingredients[1].SearchTerm, "125") || strings.Contains(shown.Ingredients[1].SearchTerm, "$") {
+		t.Fatalf("price text leaked into ingredient search term: %+v", shown.Ingredients[1])
+	}
+	if shown.Ingredients[2].Name != "Bayou Blend seasoning" || shown.Ingredients[2].Unit != "tsp" || shown.Ingredients[2].Quantity != 1.5 {
+		t.Fatalf("teaspoon ingredient was not parsed cleanly: %+v", shown.Ingredients[2])
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "search", "quesadillas", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("search Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+	var found []food.Recipe
+	if err := json.Unmarshal(stdout.Bytes(), &found); err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].SourceURL != sourceURL {
+		t.Fatalf("search did not return source URL: %+v", found)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := Run([]string{"food", "recipes", "remove", "url-bean-quesadillas", "--json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("remove Run error: %v stderr=%s stdout=%s", err, stderr.String(), stdout.String())
+	}
+}
+
 func TestFoodRecipesSearchAppliesProfileFilters(t *testing.T) {
 	t.Setenv("ALCAMPO_CONFIG_DIR", t.TempDir())
 	if err := food.SaveProfile(food.Profile{Diets: []string{"vegan"}, Allergies: []string{"fish"}}); err != nil {

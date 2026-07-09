@@ -39,7 +39,7 @@ func queryRecipes(db *sql.DB, query RecipeQuery) ([]Recipe, error) {
 	}
 
 	sqlText := `
-		SELECT r.pk, r.id, r.title, r.servings, r.prep_minutes, r.cook_minutes, r.image_url,
+		SELECT r.pk, r.id, r.title, r.servings, r.prep_minutes, r.cook_minutes, r.image_url, r.source_url,
 		       r.nutrition_kcal, r.nutrition_protein_g, r.nutrition_carbs_g, r.nutrition_fat_g
 		FROM recipes r
 		` + strings.Join(joins, "\n")
@@ -93,6 +93,7 @@ func selectRecipeRecords(db *sql.DB, query string, args ...any) ([]recipeRecord,
 			&record.recipe.PrepMinutes,
 			&record.recipe.CookMinutes,
 			&record.recipe.ImageURL,
+			&record.recipe.SourceURL,
 			&kcal,
 			&protein,
 			&carbs,

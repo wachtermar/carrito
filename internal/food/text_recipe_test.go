@@ -17,3 +17,20 @@ func TestRecipeFromTextParsesIngredientList(t *testing.T) {
 		t.Fatalf("search term = %q", recipe.Ingredients[0].SearchTerm)
 	}
 }
+
+func TestSpanishSearchTermCleansImportedEnglishRecipeNoise(t *testing.T) {
+	cases := map[string]string{
+		"Santa Fe Blend frozen vegetables ($1.25)": "verduras congeladas",
+		"1 15oz. can pinto beans ($1.25)":          "alubias pintas",
+		"cheddar cheese ($1.25)":                   "queso cheddar",
+		"Bayou Blend seasoning* ($1.25)":           "especias",
+		"8 flour tortillas ($1.25)":                "tortillas trigo",
+		"5.6oz. pkg Spanish rice ($1.25)":          "arroz",
+		"10oz. can Rotel (diced tomatoes)":         "tomate troceado",
+	}
+	for input, want := range cases {
+		if got := spanishSearchTerm(cleanIngredientName(input)); got != want {
+			t.Fatalf("spanishSearchTerm(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
