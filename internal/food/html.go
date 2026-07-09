@@ -107,6 +107,7 @@ type htmlProduct struct {
 	Quantity        string
 	PackageMath     string
 	Reason          string
+	Offers          []string
 	ImageURL        template.URL
 	ImageText       string
 	ProductURL      string
@@ -321,6 +322,7 @@ func htmlShoppingForPlanAndShop(plan MealPlan, shop ShopResult, imageBaseDir str
 			Quantity:        selected.PurchaseQuantity,
 			PackageMath:     selected.QuantityReason,
 			Reason:          selected.SelectionReason,
+			Offers:          append([]string{}, product.Offers...),
 			ImageURL:        safeTemplateImageURL(product.ImageURL, imageBaseDir),
 			ImageText:       product.ImageURL,
 			ProductURL:      product.URL,
@@ -740,6 +742,16 @@ h3 { font-size: 1.25rem; margin: 0; }
 .product-body { padding: 12px; }
 .product-body h3 { font-size: 1rem; line-height: 1.2; }
 .product-label { color: var(--tomato); font-size: .78rem; font-weight: 800; text-transform: uppercase; margin-bottom: 4px; }
+.offer-list { margin: 8px 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.offer-list li {
+  border: 1px solid #efd59a;
+  background: #fff9e8;
+  color: #5a3a02;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: .84rem;
+  font-weight: 800;
+}
 .muted { color: var(--muted); }
 .evidence-grid {
   display: grid;
@@ -877,6 +889,7 @@ h3 { font-size: 1.25rem; margin: 0; }
             <div class="product-label">Alcampo product photo</div>
             <h3>{{.Name}}</h3>
             <p class="muted">{{.Ingredient}}</p>
+            {{if .Offers}}<ul class="offer-list" aria-label="Offers">{{range .Offers}}<li>{{.}}</li>{{end}}</ul>{{end}}
             <p><strong>{{.LineTotal}}</strong>{{if .Quantity}} - buy {{.Quantity}}{{end}}</p>
             {{if .PackageMath}}<p class="muted">{{.PackageMath}}</p>{{end}}
             {{if .Reason}}<p class="muted">{{.Reason}}</p>{{end}}

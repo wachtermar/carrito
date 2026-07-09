@@ -901,7 +901,7 @@ func TestWriteHTMLFromJSONFileFoodRunArtifactCreatesMobileCookingPage(t *testing
 			Policy: PolicyBalanced,
 			SelectedProducts: []SelectedProduct{{
 				Ingredient:       Ingredient{Name: "rice", Quantity: 180, Unit: "g"},
-				Product:          ProductSummary{SKU: "rice-sku", Name: "Arroz redondo", Price: money.Money{Amount: "1.50", Currency: "EUR", Cents: 150}, ImageURL: "product.png"},
+				Product:          ProductSummary{SKU: "rice-sku", Name: "Arroz redondo", Price: money.Money{Amount: "1.50", Currency: "EUR", Cents: 150}, ImageURL: "product.png", Offers: []string{"Producto en Folleto"}},
 				PurchaseQuantity: "1",
 				PackageCount:     1,
 				LineTotal:        money.Money{Amount: "1.50", Currency: "EUR", Cents: 150},
@@ -947,6 +947,7 @@ func TestWriteHTMLFromJSONFileFoodRunArtifactCreatesMobileCookingPage(t *testing
 		"Steps",
 		"Selected Alcampo products",
 		"Alcampo product photo",
+		"Producto en Folleto",
 		"Evidence",
 	} {
 		if !strings.Contains(html, want) {
