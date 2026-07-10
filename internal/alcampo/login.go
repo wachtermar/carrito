@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -83,7 +84,7 @@ func (c *Client) Login(ctx context.Context, username, password string, opts Logi
 	loginValues.Set("startUrl", form.StartURL)
 	loginValues.Set(form.LoginParam, form.LoginParam)
 
-	ajaxBody, ajaxURL, err := c.postLoginForm(ctx, credentialAction, loginValues, formURL.String())
+	ajaxBody, ajaxURL, err := c.postCredentialForm(ctx, credentialAction, loginValues, formURL.String())
 	if err != nil {
 		return auth.Session{}, fmt.Errorf("submit credentials: %w", err)
 	}
@@ -142,6 +143,8 @@ type credentialForm struct {
 	Values     url.Values
 }
 
+type credentialPostContextKey struct{}
+
 func (c *Client) fetchLoginPage(ctx context.Context, rawURL, referer string) ([]byte, *url.URL, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -168,6 +171,44 @@ func (c *Client) postLoginForm(ctx context.Context, rawURL string, values url.Va
 		return nil, nil, err
 	}
 	return body, finalURL, nil
+}
+
+func (c *Client) postCredentialForm(ctx context.Context, rawURL string, values url.Values, referer string) ([]byte, *url.URL, error) {
+	if err := validateCredentialPostURL(rawURL); err != nil {
+		return nil, nil, err
+	}
+	ctx = context.WithValue(ctx, credentialPostContextKey{}, true)
+	return c.postLoginForm(ctx, rawURL, values, referer)
+}
+
+func isCredentialPost(ctx context.Context) bool {
+	marked, _ := ctx.Value(credentialPostContextKey{}).(bool)
+	return marked
+}
+
+func validateCredentialPostURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid credential form URL: %w", err)
+	}
+	if u.Hostname() == "" {
+		return errors.New("credential form URL must be absolute")
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return nil
+	}
+	if strings.EqualFold(u.Scheme, "http") && isLoopbackHost(u.Hostname()) {
+		return nil
+	}
+	return errors.New("refusing to submit credentials over an insecure connection; the credential form must use HTTPS")
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(strings.TrimSuffix(host, "."), "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (c *Client) doLoginRequest(req *http.Request) ([]byte, *url.URL, error) {

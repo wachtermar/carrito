@@ -30,12 +30,9 @@ skill_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
 bin_dir="${CARRITO_BIN_DIR:-${ALCAMPO_BIN_DIR:-$HOME/.local/bin}}"
 source_arg="${CARRITO_CLI_SOURCE:-${ALCAMPO_CLI_SOURCE:-}}"
 source_marker="$skill_dir/.carrito-source"
+source_from_marker=0
 default_repo="${CARRITO_CLI_REPO:-${ALCAMPO_CLI_REPO:-https://github.com/wachtermar/carrito.git}}"
 tmp_dir=""
-
-if [ -z "$source_arg" ] && [ -f "$source_marker" ]; then
-  source_arg="$(sed -n '1p' "$source_marker")"
-fi
 
 cleanup() {
   if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then
@@ -74,6 +71,11 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+if [ -z "$source_arg" ] && [ -f "$source_marker" ]; then
+  source_arg="$(sed -n '1p' "$source_marker")"
+  source_from_marker=1
+fi
+
 is_cli_source() {
   [ -f "$1/go.mod" ] && [ -d "$1/cmd/carrito" ]
 }
@@ -108,11 +110,11 @@ clone_source() {
   tmp_dir="$(mktemp -d)"
   git clone --depth 1 "$url" "$tmp_dir/repo" >/dev/null
   if is_cli_source "$tmp_dir/repo"; then
-    printf '%s\n' "$tmp_dir/repo"
+    source_dir="$tmp_dir/repo"
     return 0
   fi
   if [ -d "$tmp_dir/repo/carrito" ] && is_cli_source "$tmp_dir/repo/carrito"; then
-    printf '%s\n' "$tmp_dir/repo/carrito"
+    source_dir="$tmp_dir/repo/carrito"
     return 0
   fi
   echo "error: cloned repository does not contain carrito source" >&2
@@ -128,16 +130,20 @@ source_dir=""
 if [ -n "$source_arg" ]; then
   case "$source_arg" in
     http://*|https://*|git@*|ssh://*)
-      source_dir="$(clone_source "$source_arg")"
+      clone_source "$source_arg"
       ;;
   esac
 fi
 
 if [ -z "$source_dir" ]; then
   if ! source_dir="$(resolve_local_source)"; then
-    if [ -z "$source_arg" ]; then
-      echo "local carrito source was not found; cloning $default_repo" >&2
-      source_dir="$(clone_source "$default_repo")"
+    if [ -z "$source_arg" ] || [ "$source_from_marker" -eq 1 ]; then
+      if [ "$source_from_marker" -eq 1 ]; then
+        echo "saved carrito source no longer exists; cloning $default_repo" >&2
+      else
+        echo "local carrito source was not found; cloning $default_repo" >&2
+      fi
+      clone_source "$default_repo"
     else
       cat >&2 <<'EOF'
 error: could not find carrito source.
@@ -151,6 +157,7 @@ EOF
 fi
 
 mkdir -p "$bin_dir"
+bin_dir="$(CDPATH= cd -- "$bin_dir" && pwd)"
 
 (
   cd "$source_dir"
@@ -164,5 +171,15 @@ mkdir -p "$bin_dir"
 )
 
 "$bin_dir/carrito" --help >/dev/null
+
+launcher_marker="${CARRITO_LAUNCHER_MARKER:-}"
+if [ -z "$launcher_marker" ] && [ "$skill_dir" != "$source_dir/skills/carrito-shopping" ]; then
+  launcher_marker="$skill_dir/.carrito-bin"
+fi
+if [ -n "$launcher_marker" ]; then
+  mkdir -p "$(dirname -- "$launcher_marker")"
+  printf '%s\n' "$bin_dir/carrito" >"$launcher_marker"
+  chmod 600 "$launcher_marker"
+fi
 
 echo "installed carrito: $bin_dir/carrito"

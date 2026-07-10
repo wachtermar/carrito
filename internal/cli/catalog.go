@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -10,23 +9,22 @@ import (
 
 	"github.com/wachtermar/carrito/internal/alcampo"
 	"github.com/wachtermar/carrito/internal/output"
-	"github.com/wachtermar/carrito/internal/strutil"
 )
 
 func runSearch(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("search", stderr)
 	limit := fs.Int("limit", 10, "maximum products to return")
 	jsonOut := fs.Bool("json", false, "write JSON to stdout")
-	postal := fs.String("postal", "", "postal code hint; anonymous resolver is not verified")
 	store := marketFlag(fs, "Alcampo region/store UUID to use for pricing")
-	sort := fs.String("sort", "", "site sort option id")
-	fresh := fs.Bool("fresh", false, "locally filter likely fresh-food categories")
-	if err := parseInterspersed(fs, args, map[string]bool{"json": true, "fresh": true}); err != nil {
+	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
 		return err
 	}
 	query := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if query == "" {
 		return errors.New("search requires a query")
+	}
+	if *limit < 1 || *limit > 50 {
+		return errors.New("--limit must be between 1 and 50")
 	}
 	cfg, client, err := newClient(*store)
 	if err != nil {
@@ -36,21 +34,15 @@ func runSearch(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	warnLocation(stderr, cfg, *postal, *store)
-	products, err := client.Search(context.Background(), query, alcampo.SearchOptions{
-		Limit:    *limit,
-		RegionID: regionID,
-		Sort:     *sort,
-		Fresh:    *fresh,
-	})
+	products, err := client.Search(context.Background(), query, alcampo.SearchOptions{Limit: *limit, RegionID: regionID})
 	if err != nil {
 		return err
 	}
 	if *jsonOut {
 		return output.JSON(stdout, products)
 	}
-	for _, p := range products {
-		printProductLine(stdout, p)
+	for _, product := range products {
+		printProductLine(stdout, product)
 	}
 	return nil
 }
@@ -75,130 +67,50 @@ func runProduct(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	client.RegionID = regionID
-	p, err := client.Product(context.Background(), ref)
+	product, err := client.Product(context.Background(), ref)
 	if err != nil {
 		return err
 	}
 	if *jsonOut {
-		return output.JSON(stdout, p)
+		return output.JSON(stdout, product)
 	}
-	printProductDetail(stdout, p)
+	printProductDetail(stdout, product)
 	return nil
 }
 
-func runCategories(args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("categories", stderr)
-	id := fs.String("id", "", "category id, retailer id, slug, or path to list")
-	limit := fs.Int("limit", 20, "maximum products to return with --id")
-	jsonOut := fs.Bool("json", false, "write JSON to stdout")
-	store := marketFlag(fs, "Alcampo region/store UUID to use for products")
-	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
-		return err
-	}
-	cfg, client, err := newClient(*store)
-	if err != nil {
-		return err
-	}
-	cats, err := client.Categories(context.Background(), 3)
-	if err != nil {
-		return err
-	}
-	if *id == "" {
-		if *jsonOut {
-			return output.JSON(stdout, cats)
-		}
-		printCategories(stdout, cats, 0)
-		return nil
-	}
-	cat, ok := alcampo.FindCategory(cats, *id)
-	if !ok {
-		return fmt.Errorf("category %q not found", *id)
-	}
-	regionID, err := resolveMarket(cfg, *store)
-	if err != nil {
-		return err
-	}
-	products, err := client.CategoryProducts(context.Background(), cat, alcampo.CategoryProductsOptions{Limit: *limit, RegionID: regionID})
-	if err != nil {
-		return err
-	}
-	if *jsonOut {
-		return output.JSON(stdout, struct {
-			Category alcampo.Category  `json:"category"`
-			Products []alcampo.Product `json:"products"`
-		}{Category: cat, Products: products})
-	}
-	fmt.Fprintf(stdout, "%s (%s)\n", cat.Name, strutil.FirstNonEmpty(cat.RetailerID, cat.ID))
-	for _, p := range products {
-		printProductLine(stdout, p)
-	}
-	return nil
-}
-
-func runBatch(args []string, stdout, stderr io.Writer) error {
-	fs := newFlagSet("batch", stderr)
-	file := fs.String("file", "", "file with one query per line, or - for stdin")
-	fs.StringVar(file, "f", "", "file with one query per line, or - for stdin")
-	jsonOut := fs.Bool("json", false, "write JSON to stdout")
-	store := marketFlag(fs, "Alcampo region/store UUID to use for pricing")
-	if err := parseInterspersed(fs, args, map[string]bool{"json": true}); err != nil {
-		return err
-	}
-	if *file == "" {
-		return errors.New("batch requires -f <file|->")
-	}
-	cfg, client, err := newClient(*store)
-	if err != nil {
-		return err
-	}
-	regionID, err := resolveMarket(cfg, *store)
-	if err != nil {
-		return err
-	}
-	r, closeFn, err := openInput(*file)
-	if err != nil {
-		return err
-	}
-	defer closeFn()
-	results := []BatchResult{}
-	scanner := bufio.NewScanner(r)
-	for lineNo := 1; scanner.Scan(); lineNo++ {
-		query := strings.TrimSpace(stripComment(scanner.Text()))
-		if query == "" {
-			continue
-		}
-		res := BatchResult{LineNo: lineNo, Query: query}
-		products, err := client.Search(context.Background(), query, alcampo.SearchOptions{Limit: 1, RegionID: regionID})
-		if err != nil {
-			res.Error = err.Error()
-		} else if len(products) == 0 {
-			res.Error = "not found"
+func printProductLine(w io.Writer, product alcampo.Product) {
+	availability := "availability unknown"
+	if product.Available != nil {
+		if *product.Available {
+			availability = "available"
 		} else {
-			p := products[0]
-			res.Product = &p
+			availability = "unavailable"
 		}
-		results = append(results, res)
 	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	if *jsonOut {
-		return output.JSON(stdout, results)
-	}
-	for _, res := range results {
-		if res.Error != "" {
-			fmt.Fprintf(stdout, "%s\tERROR\t%s\n", res.Query, res.Error)
-			continue
-		}
-		fmt.Fprintf(stdout, "%s\t", res.Query)
-		printProductLine(stdout, *res.Product)
-	}
-	return nil
+	fmt.Fprintf(w, "%s\t€%s\t%s\t%s\t%s\n", firstNonEmpty(product.SKU, product.ID, "-"), product.Price.Amount, product.Size, availability, product.Name)
 }
 
-type BatchResult struct {
-	LineNo  int              `json:"line_no"`
-	Query   string           `json:"query"`
-	Product *alcampo.Product `json:"product,omitempty"`
-	Error   string           `json:"error,omitempty"`
+func printProductDetail(w io.Writer, product alcampo.Product) {
+	printProductLine(w, product)
+	if product.Brand != "" {
+		fmt.Fprintf(w, "brand\t%s\n", product.Brand)
+	}
+	if product.URL != "" {
+		fmt.Fprintf(w, "url\t%s\n", product.URL)
+	}
+	if product.Ingredients != "" {
+		fmt.Fprintf(w, "ingredients\t%s\n", product.Ingredients)
+	}
+	if product.Allergens != "" {
+		fmt.Fprintf(w, "allergens\t%s\n", product.Allergens)
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }

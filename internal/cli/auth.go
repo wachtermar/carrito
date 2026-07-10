@@ -3,6 +3,9 @@ package cli
 import (
 	"bufio"
 	"context"
+	cryptorand "crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -23,7 +26,10 @@ import (
 	"golang.org/x/term"
 )
 
-var loginWebOpenBrowser = openBrowser
+var (
+	loginWebOpenBrowser  = openBrowser
+	loginWebLoginAndSave = loginAndSave
+)
 
 func runImportHAR(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("import-har", stderr)
@@ -140,13 +146,16 @@ func runLogin(args []string, stdout, stderr io.Writer) error {
 
 func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 	fs := newFlagSet("login-web", stderr)
-	addr := fs.String("addr", "127.0.0.1:0", "local listen address for the temporary login page")
+	addr := fs.String("addr", "127.0.0.1:0", "loopback listen address for the temporary login page")
 	destination := fs.String("destination", "/", "post-login Alcampo path")
 	jsonOut := fs.Bool("json", false, "write JSON to stdout")
 	noOpen := fs.Bool("no-open", false, "print the local login URL instead of opening a browser")
-	ifNeeded := fs.Bool("if-needed", false, "skip browser login when a session already exists")
+	ifNeeded := fs.Bool("if-needed", false, "skip browser login only when authentication material and a CSRF token are already saved")
 	timeoutFlag := fs.String("timeout", "5m", "maximum time to wait for browser login")
 	if err := parseInterspersed(fs, args, map[string]bool{"json": true, "no-open": true, "if-needed": true}); err != nil {
+		return err
+	}
+	if err := validateLoginWebAddr(*addr); err != nil {
 		return err
 	}
 	timeout, err := time.ParseDuration(*timeoutFlag)
@@ -161,7 +170,7 @@ func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if cfg.Auth.Cookie != "" || cfg.Auth.BearerToken != "" {
+		if loginWebSessionIsWriteReady(cfg) {
 			res := authStatusResponse(cfg, "already logged in; browser login was skipped")
 			if *jsonOut {
 				return output.JSON(stdout, res)
@@ -170,12 +179,22 @@ func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 			return nil
 		}
 	}
+	formToken, err := newLoginWebFormToken()
+	if err != nil {
+		return err
+	}
 
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return err
 	}
+	tcpAddr, ok := ln.Addr().(*net.TCPAddr)
+	if !ok || tcpAddr.IP == nil || !tcpAddr.IP.IsLoopback() {
+		_ = ln.Close()
+		return errors.New("local login listener did not resolve to a loopback IP")
+	}
 	defer ln.Close()
+	loginOrigin := "http://" + ln.Addr().String()
 
 	type loginWebResult struct {
 		response any
@@ -189,15 +208,24 @@ func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = io.WriteString(w, loginWebPageHTML)
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = io.WriteString(w, loginWebPage(formToken))
 	})
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" && origin != loginOrigin {
+			http.Error(w, "invalid origin", http.StatusForbidden)
+			return
+		}
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "could not read form", http.StatusBadRequest)
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(r.Form.Get("form_token")), []byte(formToken)) != 1 {
+			http.Error(w, "invalid form token", http.StatusForbidden)
 			return
 		}
 		username := strings.TrimSpace(r.Form.Get("username"))
@@ -206,7 +234,7 @@ func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 			http.Error(w, "email and password are required", http.StatusBadRequest)
 			return
 		}
-		res, err := loginAndSave(username, password, *destination, "logged in from local browser; password was not stored")
+		res, err := loginWebLoginAndSave(username, password, *destination, "logged in from local browser; password was not stored")
 		password = ""
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err != nil {
@@ -229,7 +257,7 @@ func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 	}()
 	defer server.Shutdown(context.Background())
 
-	loginURL := "http://" + ln.Addr().String() + "/"
+	loginURL := loginOrigin + "/"
 	if *noOpen {
 		fmt.Fprintf(stderr, "Open this local login page: %s\n", loginURL)
 	} else if err := loginWebOpenBrowser(loginURL); err != nil {
@@ -253,12 +281,43 @@ func runLoginWeb(args []string, stdout, stderr io.Writer) error {
 	}
 }
 
+func loginWebSessionIsWriteReady(cfg *config.Config) bool {
+	return cfg != nil && (cfg.Auth.Cookie != "" || cfg.Auth.BearerToken != "") && cfg.Auth.CSRFToken != ""
+}
+
+func validateLoginWebAddr(addr string) error {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return fmt.Errorf("invalid --addr %q: expected host:port: %w", addr, err)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return errors.New("--addr must use literal localhost or a loopback IP, such as 127.0.0.1:0 or [::1]:0")
+	}
+	return nil
+}
+
+func newLoginWebFormToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := cryptorand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate local login form token: %w", err)
+	}
+	return hex.EncodeToString(raw), nil
+}
+
+func loginWebPage(formToken string) string {
+	return strings.Replace(loginWebPageHTML, "__CARRITO_FORM_TOKEN__", formToken, 1)
+}
+
 const loginWebPageHTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Alcampo login</title>
 <style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:440px;margin:10vh auto;padding:24px;color:#17202a}label{display:block;margin:14px 0 6px}input,button{font:inherit;width:100%;box-sizing:border-box;padding:10px 12px}button{margin-top:18px;background:#14532d;color:white;border:0;border-radius:8px;cursor:pointer}.note{color:#5f6b7a;font-size:14px;line-height:1.4}</style>
 </head><body><h1>Alcampo login</h1><p class="note">This local page sends your credentials only to the carrito CLI running on this computer. The password is used once to create a session and is not stored.</p>
-<form method="post" action="/login"><label for="username">Email</label><input id="username" name="username" type="email" autocomplete="username" required autofocus><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required><button type="submit">Log in</button></form></body></html>`
+<form method="post" action="/login"><input type="hidden" name="form_token" value="__CARRITO_FORM_TOKEN__"><label for="username">Email</label><input id="username" name="username" type="email" autocomplete="username" required autofocus><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required><button type="submit">Log in</button></form></body></html>`
 
 func htmlText(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")

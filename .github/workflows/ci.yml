@@ -10,42 +10,81 @@ permissions:
 
 jobs:
   go:
-    name: Go
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: Download modules
-        run: go mod download
       - name: Check formatting
         run: test -z "$(gofmt -l $(find . -name '*.go' -print))"
-      - name: Check Carrito skill config-dir guidance
-        run: python3 skills/carrito-shopping/scripts/check-skill-config-dir.py
       - name: Test
-        run: go test ./...
+        run: go test -count=1 ./...
       - name: Vet
         run: go vet ./...
       - name: Build
         run: go build -trimpath -o carrito ./cmd/carrito
+      - name: Check skill metadata
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          skill = pathlib.Path("skills/carrito-shopping/SKILL.md")
+          text = skill.read_text(encoding="utf-8")
+          parts = text.split("---", 2)
+          assert len(parts) == 3 and not parts[0].strip(), "SKILL.md needs leading YAML frontmatter"
+          frontmatter = parts[1]
+
+          def scalar(key):
+              matches = re.findall(rf"(?m)^{re.escape(key)}:\s*(.+?)\s*$", frontmatter)
+              assert len(matches) == 1, f"expected one top-level {key} field"
+              return matches[0].strip().strip('"')
+
+          assert scalar("name") == "carrito-shopping"
+          description = scalar("description")
+          assert len(description) <= 60 and description.endswith(".")
+          assert re.fullmatch(r"\d+\.\d+\.\d+", scalar("version")), "version must be semver"
+          author = scalar("author")
+          assert len(author.split()) >= 2 and author.casefold() not in {"community", "hermes agent"}, "author must identify a person"
+          assert scalar("license") == "MIT"
+          assert len(scalar("compatibility")) >= 20
+          assert scalar("platforms") == "[linux, macos]"
+
+          hermes = re.search(r"(?ms)^  hermes:\s*\n(?P<body>(?:    .+\n?)*)", frontmatter)
+          assert hermes, "metadata.hermes is required"
+          body = hermes.group("body")
+          tags_match = re.search(r"(?m)^    tags:\s*\[([^]]+)\]\s*$", body)
+          assert tags_match, "metadata.hermes.tags is required"
+          tags = [tag.strip() for tag in tags_match.group(1).split(",")]
+          assert len(tags) >= 3 and all(re.fullmatch(r"[a-z0-9-]+", tag) for tag in tags)
+          assert re.search(r"(?m)^    category:\s*productivity\s*$", body)
+          assert re.search(r"(?m)^    requires_toolsets:\s*\[terminal\]\s*$", body)
+
+          required_files = [
+              "skills/carrito-shopping/references/plan-format.md",
+              "skills/carrito-shopping/templates/mealplan.json",
+              "skills/carrito-shopping/scripts/install-carrito-cli.sh",
+              "skills/carrito-shopping/scripts/run-carrito.sh",
+          ]
+          for path in required_files:
+              assert pathlib.Path(path).is_file(), f"missing bundled skill file: {path}"
+          PY
+      - name: Validate skill template
+        run: ./carrito mealplan validate skills/carrito-shopping/templates/mealplan.json --json
+      - name: Test published-skill installer fallback
+        run: bash testdata/installer_clone_smoke.sh
 
   release-check:
-    name: Release Config
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: Check GoReleaser config
-        uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"

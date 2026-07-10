@@ -1,178 +1,116 @@
-# Carrito Skill and CLI
+# Carrito
 
-Unofficial Alcampo Spain grocery automation for agents and terminals. This repository ships:
+Carrito gives Hermes Agent one useful grocery workflow:
 
-- `carrito`, a Go CLI for product search, market-aware prices, cart review, guarded cart/checkout preparation, pantry memory, meal planning, recipes, shopping lists, and PDFs.
-- `skills/carrito-shopping`, a portable Agent Skill for Hermes Agent and OpenClaw.
-- A root `SKILL.md` compatibility shim so Git-based skill installs can start from the repository root.
+1. Hermes designs recipes for the actual household.
+2. Carrito finds current Alcampo Spain products and prices.
+3. The user approves a maximum spend.
+4. Carrito updates the cart and verifies it.
+5. Hermes returns one mobile-friendly HTML file to share with whoever is cooking.
 
-This project is not affiliated with Alcampo or Auchan. It uses private web APIs that can change without notice. Verify important prices, availability, delivery slots, and checkout state against the website before relying on them.
+The model handles flexible reasoning; the CLI handles deterministic and risky work. There is no embedded recipe database, pantry engine, nutrition ledger, readiness matrix, PDF pipeline, checkout flow, or order submission.
 
-## What It Does
+This project is unofficial and is not affiliated with Alcampo or Auchan. It uses private web APIs that may change. Product labels and physical packaging remain authoritative for allergies.
 
-- Searches Alcampo Spain products and categories with explicit market/store context.
-- Reads product detail, prices, unit prices, images, offers, and basket totals.
-- Reviews authenticated carts in read-only mode with normalized JSON for agents.
-- Prepares cart and checkout-slot workflows only behind explicit user approval and a nonzero spending guard.
-- Stores local food memory: household profile, diets/allergies/dislikes, pantry/fridge/freezer, staples, recipes, meal plans, history, and nutrition goals.
-- Generates pantry-aware meal plans, Alcampo shopping selections, nutrition evidence ledgers, basket files, recipe JSON, and printable PDFs.
-- Supports desktop-safe login through `carrito login-web --if-needed`, so credentials are entered in a temporary local browser form instead of chat.
+## Install for Hermes
 
-The CLI intentionally does not implement payment or order submission.
-
-## Install
-
-### CLI Only
-
-With Go 1.25 or newer:
+Requirements: Hermes Agent, Go 1.25 or newer, macOS or Linux.
 
 ```sh
-go install github.com/wachtermar/carrito/cmd/carrito@latest
-carrito --help
-carrito version
-```
-
-From a checkout:
-
-```sh
-make build
-./carrito --help
-```
-
-### Hermes and OpenClaw Local Install
-
-From the repository root:
-
-```sh
+git clone https://github.com/wachtermar/carrito.git
+cd carrito
 ./install-skill.sh
 ```
 
-This copies the skill to:
-
-- `~/.hermes/skills/carrito-shopping`
-- `~/.openclaw/skills/carrito-shopping`
-
-It also builds `carrito` into `~/.local/bin` when Go is available, then runs `carrito login-web --if-needed` so desktop users can authenticate when no session exists.
-
-Useful options:
+The installer copies the complete multi-file skill to `~/.hermes/skills/carrito-shopping` and builds `carrito` into `~/.local/bin`. The skill uses its bundled absolute-path launcher, so that directory does not need to be in Hermes' `PATH`. The installer does not open a login window unless requested:
 
 ```sh
-./install-skill.sh --hermes --no-login
-./install-skill.sh --openclaw --bin-dir "$HOME/.local/bin"
-CARRITO_INSTALL_RUN_TESTS=1 ./install-skill.sh --no-login
+./install-skill.sh --login
 ```
 
-### Install From GitHub
-
-Hermes direct GitHub install:
+From a published GitHub source, install the skill directory rather than a raw `SKILL.md` URL so Hermes receives its reference and template files:
 
 ```sh
 hermes skills install wachtermar/carrito/skills/carrito-shopping
 ```
 
-OpenClaw Git install:
+Then ask Hermes:
 
-```sh
-openclaw skills install git:wachtermar/carrito@main
+```text
+/carrito-shopping Plan five simple dinners for two adults and a toddler,
+avoid peanuts, add the groceries to my Alcampo cart, and give me the cooking page.
 ```
 
-OpenClaw uses the root `SKILL.md`, which delegates to the portable skill under `skills/carrito-shopping`. The skill metadata also declares a Go installer for `github.com/wachtermar/carrito/cmd/carrito`.
+Hermes asks only for missing hard facts and the final-cart spending cap. Login happens in a local browser form; credentials do not go through chat.
 
-## Quick Start
+## The small contract
 
-Set a market before price or availability reads:
+Hermes writes one plan JSON with:
+
+- household size, hard dietary rules, allergies, and dislikes;
+- day-by-day meals with servings, timing, ingredients, and cooking steps;
+- one consolidated shopping list;
+- each selected candidate SKU in `product_sku`, plus its package count.
+
+The exact format is documented in [plan-format.md](skills/carrito-shopping/references/plan-format.md).
+
+Carrito exposes three meal-plan operations:
+
+The manual examples below assume `~/.local/bin` is in `PATH`; otherwise invoke `~/.local/bin/carrito` explicitly. Hermes uses the bundled launcher and does not need this setup.
 
 ```sh
-carrito set-market --region-id ac90d761-9d58-4918-a37d-dd14e1ce384a --retailer-region-id 5 --name Vaguada
-carrito search leche --limit 3 --json
-carrito product 54178 --json
-printf '54178 2\n205192 1\n' > basket.txt
-carrito total -f basket.txt --json
+carrito mealplan validate plan.json --json
+carrito mealplan candidates plan.json --limit 4 --json
+carrito mealplan build plan.json \
+  --html-out family-plan.html \
+  --basket-out family-plan.basket.txt \
+  --json
 ```
 
-Food planning with isolated local state:
+`candidates` returns `status: "ready"` only when every shopping line has usable products. Otherwise it returns `status: "incomplete"` with `unresolved_count` and exits nonzero.
 
-```sh
-export CARRITO_CONFIG_DIR="$PWD/.carrito-dev"
-carrito food profile set --people 2 --selection-policy balanced --budget 80 --json
-carrito food pantry add rice --qty 500 --unit g --location pantry --json
-carrito food run --days 3 --people 2 --meals dinner --servings 2 --basket-out basket.txt --run-out run.json --quantity-ledger-out ledger.json --product-evidence-out product_evidence.json --refresh-product-evidence --nutrition-ledger-out nutrition_ledger.json --recipe-intake-out recipe_intake.json --recipe-quality-out recipe_quality.json --recovery-out recovery.json --recipe-swap-out recipe_swap.json --basket-optimization-out basket_optimization.json --budget-repair-out budget_repair.json --budget-deal-out budget_deal.json --serving-plan-out serving_plan.json --scaled-mealplan-out scaled_mealplan.json --pantry-out pantry.json --pantry-consumption-out pantry_consumption.json --readiness-out readiness.json --manifest-out manifest.json --audit-out audit.json --audit-mode fail --pdf-out food-plan.pdf --html-out output/html/food-plan.html --enrich-products --strict-quantity --strict-servings --strict-recipe-quality --recover-missing --allow-recipe-swap --optimize-basket --repair-budget --basket-objective safe-balanced --deal-aware --default-pantry minimal-spanish --allow-assumed-pantry --require-safe-basket --require-cook-ready --json
-```
-
-For Hermes-grade request satisfaction, also pass `--intent-file intent.json --intent-out intent.json --constraint-report-out constraint_report.json --require-intent-ready`. The intent file is a structured translation of the user's explicit meal, serving, budget, diet, cooking-time, nutrition, pantry, and PDF requirements.
-
-Authenticated cart review:
+Before asking for approval, Hermes reads the existing cart so the user sees the current total and understands that `--max` limits the whole final cart:
 
 ```sh
 carrito login-web --if-needed --json
 carrito cart get --json
 ```
 
-Cart writes require explicit approval and a spending cap:
+For a write, the login JSON must report both `"authenticated": true` and `"has_csrf_token": true`; `--if-needed` reopens login when either requirement is missing.
+
+After explicit approval:
 
 ```sh
-carrito cart set-many -f basket.txt --max 40 --json
-carrito cart get --json
+carrito cart set-many -f family-plan.basket.txt --max 100 --json
 ```
 
-## Agent Skill Behavior
+Basket quantities are minimum targets: `set-many` raises named products when needed, never reduces a larger existing quantity, and leaves unrelated lines alone. It reads the cart back itself, verifies the actual quantities and final total, and returns `verified: true`. If verification fails after a confirmed write, it reverses only its own deltas and verifies them; it never restores a stale snapshot over concurrent additions. Ambiguous outcomes require manual review. The CLI never submits checkout or payment.
 
-The skill is designed for agent surfaces, not as a hidden autonomous purchasing tool.
+## Setup and diagnostics
 
-- Agents must run `carrito login-web --if-needed --json` before authenticated reads when no session exists.
-- Agents must use `--json` output and parse stdout as data; stderr is diagnostics.
-- Open-ended meal plans and shopping runs must pass the intake gate first: people, meal scope, diet/allergy/dislike constraints, budget, pantry stance, and selection policy.
-- Full `food run` shopping bundles automatically write a mobile HTML cooking page next to `--run-out` or `--pdf-out`; pass `--html-out output/html/<name>.html` for a stable user-facing path, or `--no-html` for diagnostics-only scripts. Use `carrito food html <run.json> --out output/html/<name>.html [--cover-image path-or-url]` only to regenerate an existing run. Product package images are shopping evidence only, not dish or recipe photos.
-- Product selections must show images, prices, quantities, package math, `product_evidence_report.status`, `readiness_gate.safe_to_use_product_evidence`, `serving_plan.status` and scaled serving assumptions when present, `quantity_ledger.status`, `nutrition_ledger.status` and `readiness_gate.safe_to_report_nutrition` when present, `recipe_quality_report.status`, `readiness_gate.safe_to_use_recipes`, `budget_repair_plan.status` and applied decisions when present, `budget_deal_report.status`, `readiness_gate.budget_status`, `readiness_gate.safe_to_report_budget`, `readiness_gate.safe_to_report_deals`, `constraint_satisfaction_report.status` and `readiness_gate.safe_to_satisfy_intent` when present, `pre_recipe_swap_readiness_gate.status` when present, `recipe_swap_plan.status` when present, `basket_optimization_plan.status` when present, `pantry_resolution.status` when present, final `readiness_gate.status`, final `readiness_gate.safe_to_build`, final `readiness_gate.safe_to_cook`, `artifact_audit.status` and `artifact_audit.hermes_trust_summary` when present, `recovery_plan.status` when present, nutrition coverage, selection reasons, alternates, missing/review-only items, and estimated totals before cart mutation. Treat exit code 20 from `food run --require-safe-basket`, `--require-cook-ready`, `--require-nutrition-ready`, `--require-budget-ready`, `--require-intent-ready`, or `--require-fresh-product-evidence` as a generated diagnostic artifact, not a tool crash; treat exit code 30 from `--audit-mode fail` as an untrusted artifact bundle that must be regenerated before presenting readiness claims. The basket file is structurally safe for cart prep only when final `readiness_gate.safe_to_build` is true and `artifact_audit.hermes_trust_summary.may_present_basket_as_ready` is not false, the meal plan is complete to cook only when final `readiness_gate.safe_to_cook` and `readiness_gate.safe_to_use_recipes` are true and the audit permits cookable recipes, the user's explicit request is satisfied only when `readiness_gate.safe_to_satisfy_intent` and `constraint_satisfaction_report.claim_guard.may_claim_request_satisfied` are true and audit trust exposes `may_present_request_as_satisfied=true`, the PDF is complete only when `artifact_audit.hermes_trust_summary.may_present_pdf_as_complete` is true, nutrition/macros are safe to present as evidence-backed only when final `readiness_gate.safe_to_report_nutrition` is true and the audit permits nutrition numbers, budget/deal claims are safe only when `readiness_gate.safe_to_report_budget`/`safe_to_report_deals` and the matching audit trust flags allow them, and current Alcampo product/price/product-label nutrition claims are safe only when `artifact_audit.hermes_trust_summary.may_present_alcampo_products_as_current`, `may_present_product_prices_as_current`, and `may_present_product_nutrition_as_current` allow them. Agents may say a budget was repaired only when `budget_repair_plan.status` is `attempted_applied`, final budget readiness is reportable, and audit trust allows budget claims; failed repair is diagnostic, not permission to invent manual substitutions.
-- Hermes should create `intent.json` for serious meal-planning requests, using only explicit user constraints or saved profile facts. Vague terms such as "cheap", "healthy", or "quick" must be mapped to measurable budget, nutrition, or cooking-time thresholds before they become hard claims; otherwise they remain soft/unverifiable preferences.
-- Snapshot record/replay flags are for engineering QA and Alcampo API drift reproduction. `--record-live-snapshot` and `--replay-live-snapshot --snapshot-strict` record read-only HTTP responses, block mutation-like routes, integrate into `manifest.snapshot` and artifact audit, and return exit code 31 when snapshot evidence is missing, corrupt, or unsafe.
-- Cart and checkout writes require explicit approval plus `--max`, `CARRITO_MAX_EUR`, or `[limits] max_eur`.
-- Payment and order submission are out of scope and unsupported.
+Prices depend on the delivery market:
 
-See [skills/carrito-shopping/SKILL.md](skills/carrito-shopping/SKILL.md), [CLI reference](skills/carrito-shopping/references/cli-reference.md), and [food agent playbook](skills/carrito-shopping/references/food-agent-playbook.md) for the full agent contract.
+```sh
+carrito market --json
+carrito addresses --json
+carrito set-address <delivery_destination_id>
+```
 
-## Configuration and Data
+Catalog reads (use the candidate SKU before login):
 
-Default config lives under `~/.carrito`; override it with `CARRITO_CONFIG_DIR`.
+```sh
+carrito search "pechuga de pollo" --limit 5 --json
+carrito product <sku> --json
+```
 
-- `config.toml`: market defaults, spending guard, session metadata, and imported auth material.
-- `food/profile.json`: household size, diets, allergies, dislikes, budget, selection policy, brands/products, staples, and nutrition goals.
-- `food/pantry.json`: pantry/fridge/freezer items with quantities, locations, expiry dates, and confidence.
-- `food/recipes.db`: SQLite recipe library with embedded seed recipes plus user overrides.
-- `food/mealplans/*.json`: generated meal plans.
-- `food/history.jsonl`: cooked, received, imported, and feedback events.
-
-Auth secrets are never stored in prompts or skill files. When secrets are present, `config.toml` is written with mode `0600`.
+Internal product UUID decoration can require an authenticated session; generated basket files use those UUIDs only at cart time. Configuration is stored in `~/.carrito/config.toml` with mode `0600`. Set `CARRITO_CONFIG_DIR` to isolate it. Set `CARRITO_BASE_URL` only for a mock/test server.
 
 ## Development
 
 ```sh
-go test ./...
-go vet ./...
-go build -o carrito ./cmd/carrito
+make check
 ```
 
-Normal tests use fixtures and do not hit the live site. Opt-in live checks are documented in [docs/cli.md](docs/cli.md).
+This runs formatting checks, unit and integration tests, `go vet`, and a build. Tests use local mock servers and do not mutate a real cart.
 
-Release checks from the repository root:
-
-```sh
-git diff --check
-go test ./...
-go vet ./...
-goreleaser check
-goreleaser release --snapshot --clean
-```
-
-## Release Notes
-
-Before publishing a tag:
-
-- Confirm the repo is clean and the GitHub remote is `wachtermar/carrito`.
-- Run unit tests, `go vet`, a local build, and a snapshot release.
-- Reinstall the skill locally with `./install-skill.sh --no-login`.
-- Smoke-test a read-only product search with an isolated `CARRITO_CONFIG_DIR`.
-- Smoke-test `carrito login-web --if-needed --json` only on a machine where interactive login is acceptable.
-- Keep any live cart or checkout mutation tests opt-in and guarded by a low `--max`.
-
-The CLI reference in [docs/cli.md](docs/cli.md) contains the full command reference and troubleshooting guide.
+For a real account smoke test, first record the current cart, use a low explicit `--max`, add only known test items, require `set-many` to return `verified: true`, and restore only the quantities the test changed. If automatic rollback fails, review the cart manually. Never run live cart mutation in unattended CI.

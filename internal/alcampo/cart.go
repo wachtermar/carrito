@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/url"
 	"strings"
 	"time"
@@ -13,7 +14,7 @@ import (
 	"github.com/wachtermar/carrito/internal/money"
 )
 
-var ErrCartUnsupported = errors.New("unknown or unsupported cart command; supported commands: get, add, set, set-many, clear")
+var ErrCartUnsupported = errors.New("unknown or unsupported cart command; supported commands: get, add, set, set-many")
 
 type CartQuantityChange struct {
 	ProductID string      `json:"productId"`
@@ -55,14 +56,6 @@ func (c *Client) DecorateProducts(ctx context.Context, productIDs []string) ([]P
 func (c *Client) ApplyCartQuantity(ctx context.Context, items []CartQuantityChange) (any, error) {
 	var root any
 	if err := c.postJSON(ctx, "/api/cart/v1/carts/active/apply-quantity?cartProductSorting=CATEGORIES", items, c.BaseURL+"/basket", "basket", &root); err != nil {
-		return nil, err
-	}
-	return root, nil
-}
-
-func (c *Client) ClearCart(ctx context.Context) (any, error) {
-	var root any
-	if err := c.deleteJSON(ctx, "/api/cart/v1/carts/active/items", c.BaseURL+"/basket", "basket", &root); err != nil {
 		return nil, err
 	}
 	return root, nil
@@ -110,107 +103,330 @@ func isTransientStatus(err error) bool {
 }
 
 func CartTotalCents(root any) (int64, bool) {
-	paths := [][]string{
-		{"totals", "display", "itemPriceAfterPromos", "amount"},
-		{"totals", "display", "total", "amount"},
-		{"totals", "itemPriceAfterPromos", "amount"},
-		{"totals", "total", "amount"},
-		{"basket", "totals", "display", "itemPriceAfterPromos", "amount"},
-		{"basket", "totals", "display", "total", "amount"},
-		{"basket", "totals", "itemPriceAfterPromos", "amount"},
-		{"basket", "totals", "total", "amount"},
-		{"data", "basket", "totals", "display", "itemPriceAfterPromos", "amount"},
-		{"data", "basket", "totals", "display", "total", "amount"},
-	}
-	for _, path := range paths {
-		if cents, ok := centsAtPath(root, path...); ok {
-			return cents, true
-		}
+	rootMap, ok := root.(map[string]any)
+	if !ok {
+		return 0, false
 	}
 
+	// Cart totals are trusted only at documented cart-container locations. A
+	// recursive "first totals object" fallback can mistake a line subtotal for
+	// the whole cart and defeat the spending guard when an API shape changes.
+	containers := authoritativeCartContainers(rootMap)
+
 	var found *int64
-	walk(root, func(m map[string]any) {
-		if found != nil {
-			return
+	for _, container := range containers {
+		if _, present := container["totals"]; !present {
+			continue
 		}
-		totals := mapFromKeys(m, "totals")
-		if totals == nil {
-			return
+		cents, valid := cartContainerTotalCents(container)
+		if !valid || cents < 0 {
+			return 0, false
 		}
-		for _, path := range [][]string{
-			{"display", "itemPriceAfterPromos", "amount"},
-			{"display", "total", "amount"},
-			{"itemPriceAfterPromos", "amount"},
-			{"total", "amount"},
-		} {
-			if cents, ok := centsAtPath(totals, path...); ok {
-				found = &cents
-				return
+		if found != nil && *found != cents {
+			return 0, false
+		}
+		value := cents
+		found = &value
+	}
+	if found == nil {
+		return 0, false
+	}
+	return *found, true
+}
+
+// cartContainerTotalCents selects the most authoritative total available in a
+// cart container. A final "total" takes precedence over the item subtotal;
+// duplicate representations of the selected semantic value must agree.
+func cartContainerTotalCents(container map[string]any) (int64, bool) {
+	tiers := [][][]string{
+		{
+			{"totals", "display", "total"},
+			{"totals", "total"},
+		},
+		{
+			{"totals", "display", "itemPriceAfterPromos"},
+			{"totals", "itemPriceAfterPromos"},
+		},
+	}
+	for _, paths := range tiers {
+		var found *int64
+		present := false
+		for _, path := range paths {
+			value, exists := valueAtPath(container, path...)
+			if !exists {
+				continue
 			}
+			present = true
+			cents, valid := centsFromValue(value)
+			if !valid {
+				return 0, false
+			}
+			if found != nil && *found != cents {
+				return 0, false
+			}
+			amount := cents
+			found = &amount
 		}
-	})
-	if found != nil {
-		return *found, true
+		if present {
+			if found == nil {
+				return 0, false
+			}
+			return *found, true
+		}
 	}
 	return 0, false
 }
 
-func CartProductQuantity(root any, productID string) (string, bool) {
+// CartProductQuantity returns one unambiguous quantity for an exact product
+// identity. Repeated cart projections are accepted only when their identities
+// and quantities agree; conflicting duplicates are an error, never a first
+// match that can falsely satisfy write verification.
+func CartProductQuantity(root any, productID string) (string, bool, error) {
 	productID = strings.TrimSpace(productID)
 	if productID == "" {
-		return "", false
+		return "", false, errors.New("cart product identity cannot be empty")
 	}
 	target := strings.ToLower(productID)
 	var quantity string
-	walk(root, func(m map[string]any) {
-		if quantity != "" {
-			return
+	var normalizedQuantity string
+	ids := map[string]bool{}
+	skus := map[string]bool{}
+	var conflict error
+	for _, m := range cartLineMaps(root) {
+		if conflict != nil {
+			break
 		}
-		id := strings.ToLower(stringFromKeys(m, "productId", "id"))
-		if id != target {
-			return
+		product, identityErr := cartLineProductFromMap(m, "")
+		if identityErr != nil {
+			conflict = identityErr
+			break
 		}
-		quantity = quantityFromMap(m)
-	})
+		id := strings.ToLower(product.ID)
+		sku := strings.ToLower(product.SKU)
+		if id != target && sku != target {
+			continue
+		}
+		candidate := quantityFromMap(m)
+		if candidate == "" {
+			continue
+		}
+		normalized, ok := normalizeCartQuantity(candidate)
+		if !ok {
+			conflict = fmt.Errorf("invalid cart quantity %q for product %s", candidate, productID)
+			break
+		}
+		if id != "" {
+			ids[id] = true
+		}
+		if sku != "" {
+			skus[sku] = true
+		}
+		if len(ids) > 1 || len(skus) > 1 {
+			conflict = fmt.Errorf("conflicting cart identities for product %s", productID)
+			break
+		}
+		if normalizedQuantity != "" && normalizedQuantity != normalized {
+			conflict = fmt.Errorf("conflicting cart quantities for product %s", productID)
+			break
+		}
+		if normalizedQuantity == "" {
+			normalizedQuantity = normalized
+			quantity = candidate
+		}
+	}
+	if conflict != nil {
+		return "", false, conflict
+	}
 	if quantity == "" {
+		return "", false, nil
+	}
+	return quantity, true, nil
+}
+
+var cartLineCollectionKeys = []string{
+	"items", "cartItems", "cartLines", "basketLines", "lines",
+	"itemGroups", "productGroups", "groups", "categories",
+}
+
+// cartLineMaps enumerates only documented cart containers and their explicit
+// line/group collections. It deliberately does not recursively scan arbitrary
+// response subtrees, where recommendations can carry product-like quantities.
+func cartLineMaps(root any) []map[string]any {
+	rootMap, ok := root.(map[string]any)
+	if !ok {
+		return nil
+	}
+	containers := authoritativeCartContainers(rootMap)
+
+	var lines []map[string]any
+	var collect func(any)
+	collect = func(value any) {
+		switch typed := value.(type) {
+		case []any:
+			for _, item := range typed {
+				collect(item)
+			}
+		case map[string]any:
+			if quantityFromMap(typed) != "" && cartLineHasProductIdentity(typed) {
+				lines = append(lines, typed)
+				return
+			}
+			for _, key := range cartLineCollectionKeys {
+				if child, exists := typed[key]; exists {
+					collect(child)
+				}
+			}
+		}
+	}
+	for _, container := range containers {
+		for _, key := range cartLineCollectionKeys {
+			if value, exists := container[key]; exists {
+				collect(value)
+			}
+		}
+	}
+	return lines
+}
+
+func authoritativeCartContainers(root map[string]any) []map[string]any {
+	containers := []map[string]any{root}
+	for _, key := range []string{"basket", "basketUpdateResult"} {
+		if container, ok := root[key].(map[string]any); ok {
+			containers = append(containers, container)
+		}
+	}
+	if data, ok := root["data"].(map[string]any); ok {
+		for _, key := range []string{"basket", "basketUpdateResult"} {
+			if container, ok := data[key].(map[string]any); ok {
+				containers = append(containers, container)
+			}
+		}
+	}
+	return containers
+}
+
+func cartLineHasProductIdentity(m map[string]any) bool {
+	if stringFromKeys(m, "productId", "productID", "retailerProductId", "retailerProductID", "sku", "retailerSku") != "" {
+		return true
+	}
+	for _, key := range []string{"product", "decoratedProduct", "bopData", "productData", "article"} {
+		if child, ok := m[key].(map[string]any); ok && stringFromKeys(child, "productId", "productID", "id", "retailerProductId", "retailerProductID", "sku", "retailerSku") != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// cartLineProductFromMap gives explicit nested products precedence over
+// line-level fields. A generic line "id" is not a product identity: cart APIs
+// commonly use it for the row itself. Every identified projection must be
+// compatible; conflicting product/decorated-product data is rejected instead
+// of silently verifying whichever projection happened to be visited first.
+func cartLineProductFromMap(m map[string]any, baseURL string) (Product, error) {
+	var product Product
+	for _, key := range []string{"product", "decoratedProduct", "bopData", "productData", "article"} {
+		child, ok := m[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		candidate := productFromMap(child, baseURL)
+		if candidate.ID == "" {
+			candidate.ID = stringFromKeys(child, "productId", "productID", "id")
+		}
+		if candidate.SKU == "" {
+			candidate.SKU = stringFromKeys(child, "retailerProductId", "retailerProductID", "sku", "retailerSku")
+		}
+		if candidate.ID == "" && candidate.SKU == "" {
+			continue
+		}
+		if err := mergeCartLineProduct(&product, candidate); err != nil {
+			return Product{}, fmt.Errorf("conflicting cart product projections: %w", err)
+		}
+	}
+
+	direct := productFromMap(m, baseURL)
+	direct.ID = stringFromKeys(m, "productId", "productID")
+	direct.SKU = stringFromKeys(m, "retailerProductId", "retailerProductID", "sku", "retailerSku")
+	if direct.ID != "" || direct.SKU != "" {
+		if err := mergeCartLineProduct(&product, direct); err != nil {
+			return Product{}, fmt.Errorf("conflicting cart line and product projection: %w", err)
+		}
+	} else {
+		mergeProduct(&product, direct)
+	}
+	return product, nil
+}
+
+func mergeCartLineProduct(dst *Product, src Product) error {
+	if dst.ID != "" && src.ID != "" && !strings.EqualFold(dst.ID, src.ID) {
+		return fmt.Errorf("product ids %q and %q disagree", dst.ID, src.ID)
+	}
+	if dst.SKU != "" && src.SKU != "" && !strings.EqualFold(dst.SKU, src.SKU) {
+		return fmt.Errorf("product SKUs %q and %q disagree", dst.SKU, src.SKU)
+	}
+	mergeProduct(dst, src)
+	return nil
+}
+
+func normalizeCartQuantity(raw string) (string, bool) {
+	raw = strings.TrimSpace(strings.ReplaceAll(raw, ",", "."))
+	quantity, ok := new(big.Rat).SetString(raw)
+	if !ok {
 		return "", false
 	}
-	return quantity, true
+	return quantity.RatString(), true
 }
 
 func CartItemCount(root any) int {
 	seen := map[string]bool{}
-	walk(root, func(m map[string]any) {
-		id := stringFromKeys(m, "productId")
-		if id == "" {
-			return
-		}
+	for _, m := range cartLineMaps(root) {
 		if quantityFromMap(m) == "" {
-			return
+			continue
 		}
-		seen[id] = true
-	})
+		product, err := cartLineProductFromMap(m, "")
+		if err != nil {
+			continue
+		}
+		identity := strings.ToLower(strings.TrimSpace(product.ID))
+		if identity == "" {
+			identity = strings.ToLower(strings.TrimSpace(product.SKU))
+		}
+		if identity != "" {
+			seen[identity] = true
+		}
+	}
 	return len(seen)
 }
 
 func centsAtPath(root any, path ...string) (int64, bool) {
+	v, ok := valueAtPath(root, path...)
+	if !ok {
+		return 0, false
+	}
+	return centsFromValue(v)
+}
+
+func valueAtPath(root any, path ...string) (any, bool) {
 	v := root
 	for _, key := range path {
 		m, ok := v.(map[string]any)
 		if !ok {
-			return 0, false
+			return nil, false
 		}
 		v, ok = m[key]
 		if !ok {
-			return 0, false
+			return nil, false
 		}
 	}
-	return centsFromValue(v)
+	return v, true
 }
 
 func centsFromValue(v any) (int64, bool) {
 	p := priceFrom(v)
 	if p.Amount != "" {
+		if p.Cents < 0 || (p.Currency != "" && !strings.EqualFold(p.Currency, "EUR")) {
+			return 0, false
+		}
 		return p.Cents, true
 	}
 	if s := scalarString(v); s != "" {

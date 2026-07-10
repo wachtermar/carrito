@@ -1,301 +1,74 @@
-# Carrito CLI
+# Carrito CLI reference
 
-Unofficial, agent-friendly CLI for Alcampo Spain. It builds a single static Go binary named `carrito` for product search, pantry-aware meal planning, recipes, transparent shopping selection, product/category inspection, batch lookup, basket price totals, and guarded cart/checkout workflows.
+All agent-facing data commands support `--json`. Diagnostics go to stderr.
 
-This project is not affiliated with Alcampo or Auchan. It uses private web APIs that may change or block requests.
-
-## Install
-
-With Go 1.25 or newer:
-
-```sh
-go install github.com/wachtermar/carrito/cmd/carrito@latest
-carrito --help
-carrito version
-```
-
-From a checkout:
-
-```sh
-make build
-./carrito --help
-```
-
-No runtime dependencies are required after build. Configuration lives in `~/.carrito/config.toml`; set `CARRITO_CONFIG_DIR` to override it.
-
-## Agent Skill Install
-
-This repository includes a portable Agent Skill for Hermes Agent and OpenClaw at `skills/carrito-shopping`.
-
-From the repository root:
-
-```sh
-./install-skill.sh
-```
-
-That copies the skill into `~/.hermes/skills/carrito-shopping` and `~/.openclaw/skills/carrito-shopping`, builds `carrito` into `~/.local/bin`, then runs `carrito login-web --if-needed` so desktop users can authenticate in a browser when no session exists. Use `./install-skill.sh --no-login` or `CARRITO_INSTALL_LOGIN=0 ./install-skill.sh` to skip the login check.
-
-Install the published skill from GitHub:
-
-```sh
-hermes skills install wachtermar/carrito/skills/carrito-shopping
-openclaw skills install git:wachtermar/carrito@main
-```
-
-## Build
-
-```sh
-make build
-./carrito --help
-```
-
-Run `make test` and `make lint` before release.
-
-## Examples
-
-Before any price or availability read, set the market that serves your delivery address:
-
-```sh
-./carrito set-market --region-id ac90d761-9d58-4918-a37d-dd14e1ce384a --retailer-region-id 5 --name Vaguada
-./carrito market
-./carrito search leche --limit 3
-./carrito search leche --limit 3 --json
-./carrito product 54178 --json
-./carrito categories
-./carrito categories --id OC16 --json
-printf 'leche\narroz\nagua\n' | ./carrito batch -f -
-printf '54178 2\n205192 1\n' > basket.txt
-./carrito total -f basket.txt --json
-```
-
-Food planning stores local memory under `CARRITO_CONFIG_DIR/food/` or `~/.carrito/food/`. Recipe data lives in SQLite at `food/recipes.db`; profile, pantry, meal plan, and history files remain transparent JSON/JSONL:
-
-```sh
-./carrito food profile set --people 2 --selection-policy balanced --budget 80 --json
-./carrito food staples add milk --min 2 --unit l --search leche --json
-./carrito food pantry add rice --qty 500 --unit g --location pantry --json
-./carrito food pantry add "chicken breast" --qty 350 --unit g --location fridge --expiry 2026-07-07 --json
-./carrito food pantry list --expiring-days 3 --json
-./carrito food use-up --expiring-days 3 --json
-./carrito food recipes list --tag quick --json
-./carrito food recipes list --query chickpea --diet vegan --limit 5 --json
-./carrito food recipes search "quick rice" --profile --json
-./carrito food recipes show spanish-tortilla --json
-./carrito food recipes add --url https://example.com/recipe --json
-printf '2 pechugas de pollo, 1 cebolla, 200 g arroz' | ./carrito food recipes add - --from-text --title "Pollo rapido" --json
-./carrito food run --days 3 --people 2 --meals dinner --selection-policy balanced --servings 2 --basket-out basket.txt --run-out run.json --quantity-ledger-out ledger.json --product-evidence-out product_evidence.json --refresh-product-evidence --nutrition-ledger-out nutrition_ledger.json --recipe-intake-out recipe_intake.json --recipe-quality-out recipe_quality.json --recovery-out recovery.json --recipe-swap-out recipe_swap.json --basket-optimization-out basket_optimization.json --budget-repair-out budget_repair.json --budget-deal-out budget_deal.json --serving-plan-out serving_plan.json --scaled-mealplan-out scaled_mealplan.json --pantry-out pantry.json --pantry-consumption-out pantry_consumption.json --readiness-out readiness.json --manifest-out manifest.json --audit-out audit.json --audit-mode fail --pdf-out food-plan.pdf --html-out output/html/food-plan.html --enrich-products --strict-quantity --strict-servings --strict-recipe-quality --recover-missing --allow-recipe-swap --optimize-basket --repair-budget --basket-objective safe-balanced --deal-aware --default-pantry minimal-spanish --allow-assumed-pantry --require-safe-basket --require-cook-ready --json
-./carrito food run --days 1 --people 2 --meals dinner --run-out run.json --manifest-out manifest.json --audit-out audit.json --audit-mode fail --record-live-snapshot snapshots/alcampo-2026-07-08 --snapshot-id alcampo-2026-07-08 --json
-./carrito food run --days 1 --people 2 --meals dinner --run-out replay-run.json --manifest-out replay-manifest.json --audit-out replay-audit.json --audit-mode fail --replay-live-snapshot snapshots/alcampo-2026-07-08 --snapshot-strict --json
-./carrito food plan --days 3 --people 2 --meals dinner --json
-./carrito food shop <mealplan-id-or-file> --basket-out basket.txt --json
-./carrito food recipe "quick vegetarian pasta" --people 2 --json --out recipe.json
-./carrito food html recipe.json --out recipe.html [--cover-image path-or-url]
-./carrito food pdf recipe.json --out recipe.pdf
-./carrito food receive shop.json --json
-./carrito food import-receipt --file receipt.txt --json
-./carrito food import-orders --limit 5 --infer-staples --json
-./carrito food cook <mealplan-id-or-file> --rating 5 --json
-./carrito food history list --json
-```
-
-For Hermes request-satisfaction checks, add `--intent-file intent.json --intent-out intent.json --constraint-report-out constraint_report.json --require-intent-ready` to the full `food run` command. The CLI also accepts convenience hard constraints such as `--max-cook-minutes`, `--exclude-ingredient`, `--exclude-allergen`, and `--diet-rule`, which are merged into the loaded intent before evaluation.
-
-`food run` is the low-intervention path from profile/pantry to meal plan to shopped Alcampo products. `--recipe-file`, `--recipe-dir`, and `--recipe-url` can inject structured recipes into meal slots before serving, pantry, shopping, and PDF generation; URL import accepts schema.org Recipe JSON-LD only and intentionally fails closed on unstructured pages. `--recipe-intake-out recipe_intake.json` writes the source/import plan, `--recipe-quality-out recipe_quality.json` writes source, cookability, quantity, and image-provenance checks, `--strict-recipe-quality` makes recipe quality failures affect cook readiness, `--require-recipe-source` requires provenance for every active recipe, and `--require-recipe-images` requires verified local/cached image evidence. `--recipe-image-cache-dir` controls the cache; `--no-recipe-image-cache` disables cache writes. `--servings`, `--adult-servings`, `--child-servings`, `--toddler-servings`, or `--household-profile` can create a serving plan before pantry and shopping; household profiles can vary participants by meal and day using `default_meal_participation` rules with `days`, `from_day`, or `to_day`. `--serving-plan-out serving_plan.json` writes the serving assumptions, and `--scaled-mealplan-out scaled_mealplan.json` writes deterministic scaled recipe quantities. `--run-out run.json` writes a combined `food_run` artifact containing both the meal plan and shopping result, `--quantity-ledger-out ledger.json` writes the auditable trust layer, `--product-evidence-out product_evidence.json --refresh-product-evidence` writes final selected-SKU evidence with price/package/offer/nutrition/image coverage, `--nutrition-ledger-out nutrition_ledger.json` writes the evidence-led consumed-nutrition ledger, `--budget-repair-out budget_repair.json --repair-budget` writes a bounded budget repair plan that may switch only validated same-ingredient products while preserving readiness, `--budget-deal-out budget_deal.json` writes budget/deal evidence, over-budget status, offer caveats, and deal-aware optimization savings, `--recovery-out recovery.json` writes any ledger-driven recovery decisions, `--recipe-swap-out recipe_swap.json` writes validated meal-plan repair attempts, `--basket-optimization-out basket_optimization.json` writes audited product re-selection decisions when `--optimize-basket` is used, `--pantry-out pantry.json` writes the structured pantry/shopping delta, `--pantry-consumption-out pantry_consumption.json` writes pantry quantities planned for cooking, `--readiness-out readiness.json` writes the final readiness gate, `--pdf-out food-plan.pdf` renders the PDF from the combined artifact, and `--html-out output/html/food-plan.html` writes the mobile cooking page from that same artifact. If `--html-out` is omitted, `food run` automatically writes HTML next to `--run-out` or `--pdf-out`; use `--no-html` only for diagnostics-only scripts. The PDF and HTML include day-by-day recipes, serving assumptions, scaled ingredients, cooking instructions, recipe source/quality markers, selected products, final Alcampo product evidence, pantry assumptions/deltas, recovery actions, recipe swaps, basket optimization, budget repair actions, budget/deal evidence, product images, package math, quantity confidence, totals, nutrition evidence, readiness status, and safety caveats. The run artifact includes `recipe_intake_plan`, `recipe_quality_report`, `product_evidence_report`, `budget_repair_plan`, `budget_deal_report`, `serving_plan`, `scaled_mealplan`, `quantity_ledger.status` (`complete_exact`, `complete_estimated`, `incomplete`, or `needs_review`), `nutrition_ledger.status` (`no_coverage`, `partial`, `complete_for_purchased`, `complete_hybrid`, or `blocked`), `pantry_resolution`, `pantry_consumption_plan`, `pre_recipe_swap_readiness_gate` when repair was evaluated, `recipe_swap_plan` when requested or applied, `pre_optimization_readiness_gate`, `basket_optimization_plan`, `basket_safety`, and final `readiness_gate`; agents should treat final `readiness_gate.safe_to_build` as authoritative before saying a basket file is safe, final `readiness_gate.safe_to_cook` and `readiness_gate.safe_to_use_recipes` as authoritative before saying the whole meal plan is cook-ready, final `readiness_gate.safe_to_report_nutrition` as authoritative before presenting calories/macros as evidence-backed, final `readiness_gate.safe_to_use_product_evidence` plus audit product trust flags as authoritative before claiming Alcampo products/prices/product-label nutrition are current, and final `readiness_gate.safe_to_report_budget` plus `safe_to_report_deals` as authoritative before claiming the plan is within budget or deal-ready. `--require-fresh-product-evidence --no-product-evidence-cache` returns exit code 20 unless final selected SKUs have live refreshed detail evidence; this blocks current-product claims but does not by itself make an otherwise exact basket mechanically unsafe. `--default-pantry minimal-spanish --allow-assumed-pantry` can exclude common staples such as water, salt, and pepper from Alcampo shopping while reporting them as assumptions; saved `food pantry` memory is merged into structured pantry resolution as confirmed evidence, and `--pantry-profile pantry_profile.json` can add normalized pantry items with `value`, `unit`, `base_value`, and `base_unit`; use `--require-confirmed-pantry --require-cook-ready` when assumed staples must block cooking until confirmed. `--strict-servings --require-cook-ready` blocks cooking readiness when a recipe cannot be scaled safely; `--no-serving-scaling` preserves legacy recipe quantities. `--nutrition-mode labels|recipe|hybrid|off` controls nutrition evidence; `hybrid` keeps Alcampo label, pantry-profile, and recipe-declared nutrition separate. Pantry profile nutrition is allowed by default and can be disabled with `--allow-pantry-profile-nutrition=false`; built-in pantry nutrition remains off unless `--allow-builtin-pantry-nutrition` is passed. `--require-nutrition-ready` returns exit code 20 when the nutrition ledger fails the requested coverage thresholds from `--min-nutrition-line-coverage` or `--min-nutrition-quantity-coverage`, but it does not by itself make `safe_to_build` or `safe_to_cook` false. `--require-budget-ready` returns exit code 20 when a required budget target is absent/unparseable, the final estimated total is missing, or the final estimate exceeds the target; it does not by itself make the basket unsafe. `--repair-budget` attempts validated product-level budget repair before final product evidence, nutrition, budget, readiness, basket, PDF, HTML, manifest, and audit artifacts are sealed; agents may claim the budget was repaired only when `budget_repair_plan.status=attempted_applied`, final `safe_to_report_budget=true`, and audit trust allows budget claims. `--allow-budget-recipe-swap` records policy permission for future budget recipe swaps, but this v1 repair planner does not silently change recipes for cost. `--include-purchased-excess-nutrition` reports package excess separately; default nutrition totals count only consumed scaled recipe quantities, not the whole package. `--optimize-basket` searches validated alternatives after recovery and recipe swaps, parses conservative Alcampo offers such as `3x2`, `2x1`, `lleva 3 paga 2`, and applies a switch only when semantic match, quantity confidence, and readiness are preserved while savings, waste, or evidence improve. `--allow-recipe-swap` lets generated meal plans replace blocked recipe slots only after each candidate passes serving scaling, full Alcampo shopping, enrichment, ledger, recovery, recipe quality in strict mode, and readiness validation. `--require-safe-basket` returns exit code 20 after writing diagnostic artifacts when basket readiness is blocked; `--require-cook-ready` returns exit code 20 when pantry, serving, or strict recipe quality leaves the meal plan not cook-ready. These are not crashes. When `safe_to_build` is false, `basket.txt` is intentionally comment-only/diagnostic and must not be used for cart mutation; when `safe_to_build` is true but `safe_to_cook` is false, the basket lines are structurally valid but do not complete the meal plan without additional pantry/serving/recipe confirmation or shopping. When `safe_to_report_nutrition` is false, nutrition may still be shown as a caveated recipe estimate or partial label ledger, but not as complete/exact. When `safe_to_report_budget` is false, show the budget/deal report and budget repair plan as caveats instead of saying the plan is within budget. `--recover-missing` can repair missing products with deterministic same-ingredient Spanish alias searches and safe prep notes, but it rejects unsafe product-level mismatches such as minced beef for beef strips. `food plan` ranks meals using pantry/fridge matches, expiring items, liked cuisines, liked recipes, and rejected recipes, then adds low-stock staples from `profile.json`. Meal plans and recipes include estimated nutrition summaries when available, and saved `--nutrition-goals` can add warning notes. `food use-up` ranks recipes that consume pantry items expiring soon. `food shop` uses the saved `selection_policy` from `profile.json`, or a `--selection-policy balanced|cheapest|quality` override that is remembered, and respects liked/rejected product memory. It returns selected product images, offers, prices, grouped shopping sections with subtotals, package-count calculations, reasons, alternates, basket lines, parsed Alcampo label nutrition when present, nutrition warnings, and an estimated total before any cart mutation. Product-label nutrition is used only when a label is present and unit conversion is safe; missing labels and unsafe conversions are reported as best-effort warnings. `--basket-out basket.txt` writes the guarded cart-prep file directly only when basket readiness passes; blocked runs write diagnostic comments. After the user confirms purchase or delivery, `food receive` imports a saved shop/run JSON into pantry memory. `food import-receipt` parses plain-text receipts into pantry items, while `food import-orders` best-effort imports past Alcampo order lines from an authenticated session. `food cook` updates pantry quantities, appends cooking history, learns liked recipes from high ratings, and learns rejected recipes from low ratings.
-
-`--intent-file intent.json` loads a `meal_run_intent` that describes the user's explicit request in structured form: expected days/meals, serving units, budget target, nutrition targets, exclusions/allergens, diet rules, cooking-time limits, pantry requirements, and PDF/recipe completeness expectations. `--intent-out intent.json` writes the normalized intent into the artifact bundle, and `--constraint-report-out constraint_report.json` writes a deterministic `constraint_satisfaction_report` with satisfied, unsatisfied, unknown, and not-applicable checks plus evidence references. `--require-intent-ready` returns exit code 20 when hard constraints are unmet or unknown under the intent claim policy, but it does not by itself invalidate a structurally safe basket; the basket file may remain usable only if `safe_to_build` is true and it contains the request-constraint warning headers. Agents may present the user request as satisfied only when `readiness_gate.safe_to_satisfy_intent=true`, `constraint_satisfaction_report.claim_guard.may_claim_request_satisfied=true`, and the disk audit exposes `artifact_audit.hermes_trust_summary.may_present_request_as_satisfied=true`. Vague request language is not parsed by Go: Hermes must map words like "cheap", "healthy", or "quick" into measurable fields before running the CLI, or report them as soft/unverifiable preferences. Deterministic ingredient/allergen exclusions are evidence checks over recipe/product text and are not a medical allergy guarantee; missing Alcampo nutrition labels are unknown evidence, not zero nutrition.
-
-`--manifest-out manifest.json` writes a generation manifest with artifact paths, hashes, sizes, readiness summary, generation exit code, and cross-stage fingerprints including recipe-set, recipe-quality, recipe-image, product-evidence, budget-repair, budget-deal, intent, and constraint-satisfaction fingerprints. `--audit-out audit.json --audit-mode fail` reopens the written run, sidecars, basket, and PDF from disk, verifies hashes, sidecar equality, fingerprint consistency, guarded basket actionability, PDF trust markers including final Alcampo product evidence, recipe source/quality, budget repair, budget/deal, and request-constraint markers, and basic ledger/product-evidence/nutrition/recipe-quality/budget-repair/budget-deal/constraint consistency, then returns exit code 30 if the bundle contradicts itself. Exit 30 means the artifacts are not trustworthy even if readiness would otherwise be exit 0 or 20. `carrito food validate-run --run run.json --manifest manifest.json --audit-out audit.json --mode hermes --audit-mode fail --pdf food-plan.pdf --basket basket.txt --json` reruns the same disk-based audit for an existing bundle. Agents should prefer `artifact_audit.hermes_trust_summary`: when `trustworthy` is false, regenerate the bundle before presenting readiness claims; when `may_present_basket_as_ready`, `may_present_cook_ready`, `may_present_recipes_as_cookable`, `may_present_pdf_as_complete`, `may_present_nutrition_numbers`, `may_present_budget_as_ready`, `may_present_deals_as_ready`, `may_present_request_as_satisfied`, `may_present_alcampo_products_as_current`, `may_present_product_prices_as_current`, or `may_present_product_nutrition_as_current` is false, caveat or suppress that claim even if the raw readiness fields look favorable.
-
-For engineering QA and live API drift investigations, `food run` can record and replay read-only Alcampo HTTP responses with `--record-live-snapshot <dir>` and `--replay-live-snapshot <dir> --snapshot-strict`. Snapshots write `snapshot_manifest.json` plus base64 response files under `responses/`; request signatures redact volatile query/body fields, forbid cart/auth/checkout/account-like mutation routes, and replay never falls back to live network. Replay uses the recorded origin for relative product URLs but still intercepts transport before any HTTP request is sent. Strict replay misses, mutation attempts, corrupt response files, duplicate signatures with different bodies, or invalid snapshot manifests return exit code 31. When a run also writes `--manifest-out` and `--audit-out`, the food manifest includes snapshot mode, entry counts, manifest hash, replay hits, and replay misses; the artifact audit verifies the snapshot manifest hash, response-file hashes, and zero strict replay misses before the bundle can be trusted.
-
-The editable recipe library is stored in `~/.carrito/food/recipes.db` or `CARRITO_CONFIG_DIR/food/recipes.db`. The database has normalized recipe, tag, ingredient, equipment, step, substitution, allergen-note, nutrition, source URL, and FTS tables so large libraries can be searched and filtered without scanning per-recipe files. Embedded seed recipes are inserted automatically, and user recipes with the same `id` override embedded seeds. Legacy JSON files in `food/recipes/*.json` are imported once into SQLite for migration; new custom recipes should be added with `food recipes add`. Use `food recipes add --url <recipe-page-url> --json` for schema.org Recipe JSON-LD webpages; it fails closed on unstructured pages and preserves `source_url` in later `show`, `list`, and `search` output.
-
-With an imported Alcampo web session:
-
-```sh
-./carrito addresses --json
-./carrito set-address <delivery_destination_id>
-./carrito checkout addresses --json
-./carrito checkout slots --json
-./carrito cart get --json
-./carrito cart add <product_id_or_sku> 1 --max 20
-./carrito checkout select-slot --slot <slot_id> --max 50
-```
-
-Basket format:
+## Meal plans
 
 ```text
-<product_id_or_sku> <qty> # optional comment
-54178 2
-205192 1
+carrito mealplan validate <plan.json> [--selected] [--json]
+carrito mealplan candidates <plan.json> [--limit 1..10] [--store REGION_ID] [--json]
+carrito mealplan build <plan.json> [--html-out FILE] [--basket-out FILE] [--store REGION_ID] [--json]
 ```
 
-`total` uses exact cent math and supports fractional quantities.
+- `validate` checks the canonical plan. `--selected` also requires the exact selected candidate SKU in `product_sku` and a positive package count for each shopping line.
+- `candidates` searches the configured Alcampo market for each shopping query and returns up to four products by default. Complete results use `status: "ready"`; any failed or empty search returns `status: "incomplete"`, `unresolved_count`, per-item errors, and a nonzero exit.
+- `build` re-reads every selected product, rejects missing price or unavailable products, calculates the selected-product total, writes a guarded basket file, and renders the single-file cooking HTML.
+- Default build paths replace `.json` with `.html` and `.basket.txt`.
 
-## JSON
+The JSON format is documented in [plan-format.md](../skills/carrito-shopping/references/plan-format.md).
 
-Every read command supports `--json`. Example shape:
+## Catalog
 
-```json
-[
-  {
-    "sku": "54178",
-    "name": "AUCHAN Leche entera de vaca 6 x 1 l Producto Alcampo.",
-    "price": {"amount": "5.76", "currency": "EUR", "cents": 576},
-    "unit_price": {"amount": "0.96", "currency": "EUR", "cents": 96},
-    "unit": "litre",
-    "available": true
-  }
-]
+```text
+carrito search <query> [--limit 1..50] [--store REGION_ID] [--json]
+carrito product <sku|product-id|URL> [--store REGION_ID] [--json]
 ```
 
-Logs, warnings, and errors go to stderr. Data goes to stdout. Errors exit nonzero.
+Search returns current listing data. Product refreshes the exact current-market listing, keeps its identity, price, size, and availability authoritative, and enriches it only with static page details such as ingredients, allergens, nutrition text, and images. SKU reads are public; resolving an internal product UUID can require an authenticated session, so meal plans store candidate SKUs in `product_sku`. Missing online label fields are unknown, not proof that a product is allergy-safe.
 
-Food commands also emit stable JSON for agent workflows. Meal plans include recipes, pantry usage, required purchases, and the saved file path. Shopping results include one selected product per required purchase, product image URLs when available, offer data, package quantities, `selection_reason`, `quantity_reason`, `alternates_considered`, `basket_lines`, and `estimated_total`.
+## Cart
 
-## Location
-
-Search, product price merging, category product listing, batch, and total require an explicit market. This avoids silently pricing against the wrong store when availability varies by delivery address.
-
-The anonymous region discovered during development was Vaguada:
-
-```toml
-[defaults]
-region_id = "ac90d761-9d58-4918-a37d-dd14e1ce384a"
-retailer_region_id = "5"
-region_name = "Vaguada"
+```text
+carrito cart get [--json] [--raw]
+carrito cart add <product-ref> <quantity> --max EUR [--json]
+carrito cart set <product-ref> <quantity> --max EUR [--json]
+carrito cart set-many -f <basket-file|-> --max EUR [--json]
 ```
 
-Use `--store <regionId>` or `--market <regionId>` to override a single read request with a known region id. `carrito set-postal <postal_code>` saves the postal code hint, but anonymous postal-to-region resolution is blocked outside a full web session, so it does not pretend to change regions.
+Every write requires:
 
-For authenticated accounts, log in directly or import an existing web session:
+- an authenticated Alcampo session;
+- a CSRF token;
+- a readable current cart total;
+- a current product price;
+- a positive maximum total from `--max`, `CARRITO_MAX_EUR`, or config.
 
-```sh
-./carrito login --username you@example.com
-./carrito import-curl --file copied-curl.txt
-./carrito addresses --json
-./carrito set-address <delivery_destination_id>
+The basket format is one minimum quantity per line:
+
+```text
+internal-product-id 2 # optional comment
+another-product-id 1
 ```
 
-`set-address` fetches the delivery destination, saves its resolved region id, and makes future searches use that market.
+Before requesting approval for a plan write, run `cart get --json` and explain that `--max` limits the whole final cart.
 
-## Spending Guard
+`set-many` ensures each named product is present at least at its basket quantity. It never reduces a larger existing quantity and does not change unrelated lines. After writing, it reads the cart back and succeeds only with `verified: true`, verified actual quantities, and the actual `cart_total_after`. If verification fails after a confirmed write, it reverses only its own deltas and verifies them, so a concurrent addition is not erased. Ambiguous or failed reversals require manual cart review rather than a stale-snapshot restore.
 
-Commands that calculate or would write monetary state support the spending guard model:
+## Login and market
 
-- `--max <eur>`
-- `CARRITO_MAX_EUR`
-- `[limits] max_eur` in `config.toml`
-
-`total --max 20` fails if the verified basket total is above the cap. Cart and checkout writes require a nonzero spending guard and fail closed when the active cart total cannot be verified.
-
-## Auth
-
-The CLI never accepts passwords as flags and never stores the password. Direct login uses the same HTTPS OAuth/Visualforce flow exposed by the site:
-
-```sh
-./carrito login --username you@example.com
-./carrito login-web --if-needed
-printf '%s\n' "$CARRITO_PASSWORD" | ./carrito login --username "$CARRITO_USERNAME" --password-stdin
-CARRITO_USERNAME=you@example.com ./carrito login --json
-./carrito whoami --json
+```text
+carrito login-web [--if-needed] [--json]
+carrito whoami [--json]
+carrito market [--json]
+carrito addresses [--json]
+carrito set-address <delivery_destination_id> [--json]
+carrito set-market --region-id UUID [--retailer-region-id ID] [--name NAME] [--json]
 ```
 
-`login-web --if-needed` starts a temporary `127.0.0.1` browser form only when no session exists, opens it automatically, uses the entered password once, and shuts down after the session is saved. This works well from desktop agents because the credential fields live in the user's browser rather than the chat or terminal transcript. The terminal `login` form prompts for the password without echo when run interactively. For automation, use `CARRITO_PASSWORD` from the runner secret manager or pipe it with `--password-stdin`.
+`login-web` starts a temporary local form so the user enters credentials outside chat. With `--if-needed`, it skips only when authentication material and a CSRF token are both saved, which makes the session cart-write ready. Session material is written only to the local config file. CAPTCHA, MFA, disabled-account, and consent challenges are not bypassed.
 
-Session import remains available:
+## Exit behavior
 
-```sh
-./carrito import-har --file carrito.har
-./carrito import-curl --file copied-curl.txt
-./carrito import-curl --clipboard
-pbpaste | ./carrito import-curl --file -
-./carrito whoami --json
-```
+Normal failures return a nonzero exit code and an `error:` line on stderr. Invalid plan errors name the exact JSON path. Incomplete candidates also return their JSON payload before the nonzero exit. An estimated spending-guard failure occurs before mutation; a post-write verification failure triggers guarded delta reversal when it is safe.
 
-Only cookies, bearer tokens, CSRF tokens, customer/visitor ids, delivery-destination ids, and location hints are stored. When secrets are present, `config.toml` is written with mode `0600`.
-
-No automatic refresh is implemented because no safe refresh call was verified. Run `login` or re-import when the web session expires. The CLI does not bypass CAPTCHA, MFA, disabled-account, consent, or risk checks; if the site requires one of those, login fails closed with the returned error.
-
-For agent runners such as Hermes-style or OpenClaw-style task agents, keep auth material separate from prompts and source code. A session-import bootstrap is:
-
-```sh
-export CARRITO_CONFIG_DIR="$PWD/.carrito-agent"
-printf '%s' "$CARRITO_CURL" | ./carrito import-curl --file -
-./carrito set-address <delivery_destination_id>
-./carrito whoami --json
-```
-
-Or use direct login from runner secrets:
-
-```sh
-export CARRITO_CONFIG_DIR="$PWD/.carrito-agent"
-printf '%s\n' "$CARRITO_PASSWORD" | ./carrito login --username "$CARRITO_USERNAME" --password-stdin
-./carrito set-address <delivery_destination_id>
-./carrito whoami --json
-```
-
-Store `CARRITO_CURL`, `CARRITO_USERNAME`, and `CARRITO_PASSWORD` only in the runner's secret manager.
-
-## Cart and Checkout
-
-Supported with a logged-in or imported session:
-
-```sh
-./carrito cart get --json
-./carrito cart get --json --raw
-./carrito cart add <product_id_or_sku> <qty> --max <eur>
-./carrito cart set <product_id_or_sku> <qty> --max <eur>
-./carrito cart set-many -f basket.txt --max <eur>
-./carrito cart clear --yes --max <eur>
-./carrito checkout addresses
-./carrito checkout slots
-./carrito checkout create --max <eur>
-./carrito checkout select-slot --slot <slot_id> --max <eur>
-```
-
-`cart get --json` returns a normalized cart summary for agents: item count, total, and line items with product id/SKU, name, brand, quantity, package price, unit price, line total, size, category, product URL, image URLs, offers, and availability. Use `cart get --json --raw` only when debugging Alcampo private-API response drift.
-
-`checkout slots` prints slot ids in human output. Use one of those ids with `checkout select-slot` to reserve the slot for the configured delivery address and market.
-
-All writes require:
-
-- an imported cookie or bearer token
-- an imported `x-csrf-token`
-- a verified active cart total
-- a nonzero `--max`, `CARRITO_MAX_EUR`, or `[limits] max_eur`
-
-`checkout confirm-slot -f <json> --max <eur>` exists only for sending an explicit confirmation JSON body returned by the reservation flow. The CLI does not guess that payload.
-
-Payment and order submission remain disabled. No fake payment or order-placement endpoint is implemented.
-
-## Troubleshooting
-
-- `403`: the web app may have changed headers, blocked a page, or required an authenticated web session. Try again later or import your own session.
-- Prices differ from the website: check region/store context and use `--store <regionId>` if known.
-- `no market set`: run `set-market` or import a HAR/cURL that contains a region id before searching.
-- Product detail is partial: listing data is still returned when a product detail page or detail field is unavailable.
-- Empty batch/total result: confirm that each line is a searchable term or SKU and that the site returns it for the current region.
-
-## Development
-
-```sh
-go test ./...
-go vet ./...
-go build -o carrito ./cmd/carrito
-make live-test
-```
-
-Normal tests use fixtures and do not hit the live site. `make live-test` intentionally calls public read endpoints.
-
-Authenticated live checks are opt-in and use only the CLI/direct HTTP implementation:
-
-```sh
-CARRITO_LIVE_AUTH=1 make auth-live-test
-CARRITO_LIVE_AUTH=1 CARRITO_TEST_ADD_REF=947535 CARRITO_TEST_MAX_EUR=20 make auth-live-test
-CARRITO_LIVE_AUTH=1 CARRITO_TEST_SLOT_ID=<slot_id> CARRITO_TEST_MAX_EUR=50 make auth-live-test
-```
-
-Run `import-curl`/`import-har` and `set-address` first. The optional `CARRITO_TEST_ADD_REF` and `CARRITO_TEST_SLOT_ID` variables intentionally mutate cart/slot state but never submit an order.
-
-For local fixture tests or controlled mock servers, `CARRITO_BASE_URL` overrides the default Alcampo origin. Do not set it for normal use.
+There are no checkout, slot reservation, order submission, deterministic recipe planning, pantry lifecycle, PDF, nutrition-ledger, or artifact-audit commands.

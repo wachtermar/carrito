@@ -128,15 +128,43 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
 	data := []byte(render(cfg))
-	return os.WriteFile(path, data, 0o600)
-}
-
-func HasSecrets(cfg *Config) bool {
-	return cfg.Auth.Cookie != "" || cfg.Auth.BearerToken != "" || cfg.Auth.CSRFToken != "" || cfg.Auth.CustomerID != "" || cfg.Auth.VisitorID != ""
+	temp, err := os.CreateTemp(dir, ".config.toml.tmp-*")
+	if err != nil {
+		return err
+	}
+	tempPath := temp.Name()
+	ok := false
+	defer func() {
+		_ = temp.Close()
+		if !ok {
+			_ = os.Remove(tempPath)
+		}
+	}()
+	if err := temp.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := temp.Write(data); err != nil {
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		return err
+	}
+	ok = true
+	return nil
 }
 
 func fillDefaults(cfg *Config) {

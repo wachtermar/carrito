@@ -37,9 +37,9 @@ func ParseCents(s string) (int64, error) {
 	if m == nil {
 		return 0, fmt.Errorf("invalid money amount %q", s)
 	}
-	euros, err := strconv.ParseInt(m[2], 10, 64)
-	if err != nil {
-		return 0, err
+	euros, ok := new(big.Int).SetString(m[2], 10)
+	if !ok {
+		return 0, fmt.Errorf("invalid money amount %q", s)
 	}
 	frac := m[3]
 	for len(frac) < 3 {
@@ -52,23 +52,35 @@ func ParseCents(s string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	cents := euros*100 + millis/10
+	cents := new(big.Int).Mul(euros, big.NewInt(100))
+	fractionCents := millis / 10
 	if millis%10 >= 5 {
-		cents++
+		fractionCents++
 	}
+	cents.Add(cents, big.NewInt(fractionCents))
 	if m[1] == "-" {
-		cents = -cents
+		cents.Neg(cents)
 	}
-	return cents, nil
+	if !cents.IsInt64() {
+		return 0, errors.New("money amount is outside the supported range")
+	}
+	return cents.Int64(), nil
 }
 
 func FormatAmount(cents int64) string {
 	sign := ""
-	if cents < 0 {
+	amount := big.NewInt(cents)
+	if amount.Sign() < 0 {
 		sign = "-"
-		cents = -cents
+		amount.Abs(amount)
 	}
-	return fmt.Sprintf("%s%d.%02d", sign, cents/100, cents%100)
+	euros, fraction := new(big.Int), new(big.Int)
+	euros.QuoRem(amount, big.NewInt(100), fraction)
+	fractionText := fraction.String()
+	if len(fractionText) < 2 {
+		fractionText = "0" + fractionText
+	}
+	return sign + euros.String() + "." + fractionText
 }
 
 func Format(cents int64, currency string) string {
@@ -99,10 +111,14 @@ func MultiplyCentsByQuantity(cents int64, qty string) (int64, error) {
 		return 0, err
 	}
 	total := new(big.Rat).Mul(new(big.Rat).SetInt64(cents), q)
-	return roundRatToInt(total), nil
+	rounded := roundRat(total)
+	if !rounded.IsInt64() {
+		return 0, errors.New("money total is outside the supported range")
+	}
+	return rounded.Int64(), nil
 }
 
-func roundRatToInt(r *big.Rat) int64 {
+func roundRat(r *big.Rat) *big.Int {
 	num := new(big.Int).Set(r.Num())
 	den := new(big.Int).Set(r.Denom())
 	sign := num.Sign()
@@ -118,5 +134,5 @@ func roundRatToInt(r *big.Rat) int64 {
 	if sign < 0 {
 		q.Neg(q)
 	}
-	return q.Int64()
+	return q
 }

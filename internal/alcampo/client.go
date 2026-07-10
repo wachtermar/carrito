@@ -35,7 +35,6 @@ type Client struct {
 	visitorID  string
 
 	httpClient *http.Client
-	snapshot   *liveSnapshotSession
 
 	mu          sync.Mutex
 	initialized bool
@@ -50,6 +49,9 @@ func New(cfg *config.Config) (*Client, error) {
 	baseURL := strings.TrimRight(firstEnv("CARRITO_BASE_URL", "ALCAMPO_BASE_URL"), "/")
 	if baseURL == "" {
 		baseURL = config.DefaultBaseURL
+	}
+	if err := validateBaseURL(baseURL); err != nil {
+		return nil, err
 	}
 	c := &Client{
 		BaseURL:       baseURL,
@@ -67,6 +69,7 @@ func New(cfg *config.Config) (*Client, error) {
 			Jar:     jar,
 		},
 	}
+	c.httpClient.CheckRedirect = c.checkRedirect
 	if c.RegionID == "" {
 		c.RegionID = config.DefaultRegionID
 	}
@@ -74,6 +77,24 @@ func New(cfg *config.Config) (*Client, error) {
 		c.SourceVersion = config.DefaultSourceVersion
 	}
 	return c, nil
+}
+
+func validateBaseURL(rawURL string) error {
+	target, err := url.Parse(rawURL)
+	if err != nil || target.Hostname() == "" {
+		return fmt.Errorf("invalid Alcampo base URL %q", rawURL)
+	}
+	if target.User != nil || (target.Path != "" && target.Path != "/") || target.RawQuery != "" || target.Fragment != "" {
+		return fmt.Errorf("invalid Alcampo base URL %q: use an origin without credentials, path, query, or fragment", rawURL)
+	}
+	official, _ := url.Parse(config.DefaultBaseURL)
+	if sameOrigin(target, official) {
+		return nil
+	}
+	if (strings.EqualFold(target.Scheme, "http") || strings.EqualFold(target.Scheme, "https")) && isLoopbackHost(target.Hostname()) {
+		return nil
+	}
+	return fmt.Errorf("refusing non-official Alcampo base URL %q; test overrides must use localhost or a loopback IP", rawURL)
 }
 
 func firstEnv(names ...string) string {
@@ -179,22 +200,6 @@ func (c *Client) putJSON(ctx context.Context, path string, body any, referer, ro
 	return decodeJSON(respBody, out)
 }
 
-func (c *Client) deleteJSON(ctx context.Context, path string, referer, route string, out any) error {
-	if err := c.InitSession(ctx); err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.BaseURL+path, nil)
-	if err != nil {
-		return err
-	}
-	c.setAPIHeaders(req, referer, route)
-	respBody, err := c.do(req)
-	if err != nil {
-		return err
-	}
-	return decodeJSON(respBody, out)
-}
-
 func (c *Client) getPage(ctx context.Context, pathOrURL, referer string) ([]byte, error) {
 	if err := c.InitSession(ctx); err != nil {
 		return nil, err
@@ -212,9 +217,6 @@ func (c *Client) getPage(ctx context.Context, pathOrURL, referer string) ([]byte
 }
 
 func (c *Client) do(req *http.Request) ([]byte, error) {
-	if body, handled, err := c.doSnapshot(req); handled {
-		return body, err
-	}
 	c.throttle()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -222,9 +224,6 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 6<<20))
-	if recordErr := c.recordSnapshotResponse(req, resp.StatusCode, resp.Header.Get("Content-Type"), body); recordErr != nil {
-		return nil, recordErr
-	}
 	if resp.StatusCode < 200 || resp.StatusCode > 399 {
 		return nil, &httpx.StatusError{Method: req.Method, URL: req.URL.String(), StatusCode: resp.StatusCode, Status: resp.Status, Body: snippet(body)}
 	}
@@ -254,6 +253,9 @@ func (c *Client) setAPIHeaders(req *http.Request, referer, route string) {
 	if route != "" {
 		req.Header.Set("client-route-id", route)
 	}
+	if !c.isBaseOrigin(req.URL) {
+		return
+	}
 	if c.csrf != "" {
 		req.Header.Set("x-csrf-token", c.csrf)
 	}
@@ -271,11 +273,64 @@ func (c *Client) setPageHeaders(req *http.Request, referer string) {
 	if referer != "" {
 		req.Header.Set("Referer", referer)
 	}
+	if !c.isBaseOrigin(req.URL) {
+		return
+	}
 	if c.authCookie != "" {
 		req.Header.Set("Cookie", c.authCookie)
 	}
 	if c.bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+c.bearer)
+	}
+}
+
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("stopped after 10 redirects")
+	}
+	if req.Method == http.MethodPost && isCredentialPost(req.Context()) {
+		if err := validateCredentialPostURL(req.URL.String()); err != nil {
+			return err
+		}
+	}
+	if !c.isBaseOrigin(req.URL) {
+		stripAlcampoCredentials(req.Header)
+	}
+	return nil
+}
+
+func (c *Client) isBaseOrigin(target *url.URL) bool {
+	base, err := url.Parse(c.BaseURL)
+	return err == nil && sameOrigin(base, target)
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil || a.Hostname() == "" || b.Hostname() == "" {
+		return false
+	}
+	if !strings.EqualFold(a.Scheme, b.Scheme) || !strings.EqualFold(a.Hostname(), b.Hostname()) {
+		return false
+	}
+	return originPort(a) == originPort(b)
+}
+
+func originPort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
+}
+
+func stripAlcampoCredentials(header http.Header) {
+	for _, name := range []string{"Cookie", "Authorization", "X-CSRF-Token", "Customer-ID", "Visitor-ID"} {
+		header.Del(name)
 	}
 }
 
@@ -296,19 +351,6 @@ func snippet(body []byte) string {
 		return s[:500] + "..."
 	}
 	return s
-}
-
-func (c *Client) absoluteURL(v string) string {
-	if v == "" {
-		return ""
-	}
-	if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
-		return v
-	}
-	if strings.HasPrefix(v, "/") {
-		return c.BaseURL + v
-	}
-	return c.BaseURL + "/" + strings.TrimPrefix(v, "/")
 }
 
 func decodeJSON(body []byte, out any) error {

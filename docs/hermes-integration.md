@@ -1,58 +1,66 @@
-# Hermes Agent Integration Decision
+# Hermes integration
 
-Date reviewed: 2026-07-06
+Carrito is a Hermes Skill backed by a small Go CLI.
 
-Primary references:
+The division of responsibility is deliberate:
 
-- https://hermes-agent.nousresearch.com/docs/developer-guide/creating-skills
-- https://hermes-agent.nousresearch.com/docs/developer-guide/adding-tools
-- https://hermes-agent.nousresearch.com/docs/user-guide/features/skills
-- https://hermes-agent.nousresearch.com/docs/user-guide/features/plugins
-- https://hermes-agent.nousresearch.com/docs/guides/build-a-hermes-plugin
+- Hermes reasons about households, recipes, diets, quantities, substitutions, and product choice.
+- Carrito owns authentication, current Alcampo data, price math, maximum-spend enforcement, cart mutation, read-back, schema validation, and deterministic HTML rendering.
 
-## Decision
+This follows Hermes' progressive-disclosure model: the skill metadata stays short, the procedure loads only when invoked, and the plan-format reference loads only for meal-plan creation.
 
-Keep Carrito as a Hermes Skill that drives the local `carrito` CLI through terminal commands.
+## Distribution
 
-Hermes' own guidance prefers a Skill when a capability can be expressed as instructions plus shell commands, especially when wrapping an external CLI/API. That matches this project: the Go CLI already owns product search, market context, food memory, recipe planning, JSON output, cart safety checks, auth bootstrap, receipt/order import, PDF generation, and exact money/quantity logic.
+The complete skill lives at `skills/carrito-shopping`. Install the directory from GitHub or a Hermes tap. Raw URL installs are suitable only for single-file skills and would omit the template/reference files used here.
 
-Do not add a built-in Hermes core tool. The tool guide is for changes inside the Hermes repo (`tools/*.py` plus `toolsets.py`) and says most custom tools should instead be plugins. This integration is project-specific and does not need to ship as a Hermes built-in.
+Local development installs use:
 
-Do not start with a Hermes plugin. Plugins are useful when the model needs custom Python tool schemas, lifecycle hooks, or project-local tools that should be called directly. This project already has a precise CLI API with stable JSON, so a plugin would mostly duplicate the command surface and create another layer to test.
+```sh
+./install-skill.sh
+```
 
-## When To Reconsider
+The installer removes only duplicate category copies that carry a `.carrito-source` marker pointing to the same checkout. It does not delete unrelated user skills.
 
-Build a Hermes plugin/tool later only if at least one of these becomes true:
+## Evaluation
 
-- Hermes needs direct model-visible tool schemas for individual Alcampo operations.
-- Credential setup must be managed by Hermes rather than the CLI/browser login flow.
-- The integration needs lifecycle hooks, background monitoring, barcode/camera streams, or push events.
-- The CLI can no longer provide reliable JSON contracts for complex operations.
+Install the current skill, point `CARRITO_BASE_URL` at the mock server, and give every persona a newly created profile. A new chat inside a reused profile is not isolated: its memory can change later results.
 
-## Hermes-Specific Requirements
+Start the stateful mock in strict mode (the default):
 
-- `SKILL.md` includes Hermes frontmatter: `name`, `description`, `version`, `author`, `license`, `platforms`, and `metadata.hermes`.
-- The skill uses `${HERMES_SKILL_DIR}` for bundled scripts and references because Hermes substitutes it at load time.
-- The skill keeps bulky command detail in `references/cli-reference.md` and `references/food-agent-playbook.md` so normal prompts stay focused.
-- The skill tells Hermes to use JSON output, verify read-backs after writes, and never place orders or handle raw secrets in chat.
-- For serious meal-planning requests, Hermes writes a structured `meal_run_intent` before running `food run`, saves it with `--intent-out`, saves deterministic satisfaction evidence with `--constraint-report-out`, and uses `--require-intent-ready`. Hermes may only say the user request is satisfied when readiness, the constraint report, and artifact audit all expose the matching request-satisfaction trust flags.
-- For shopping/PDF meal-plan requests, Hermes writes `--product-evidence-out product_evidence.json` with `--refresh-product-evidence` and reads `product_evidence_report`, `readiness_gate.safe_to_use_product_evidence`, and the audit trust flags before making product, price, offer, stock, or product-label nutrition claims. Use `--require-fresh-product-evidence --no-product-evidence-cache` when the user needs current live Alcampo products/prices rather than cached or replayed evidence.
-- Hermes must not treat vague words such as "cheap", "healthy", or "quick" as hard constraints unless it maps them to explicit budget, nutrition, or cooking-time thresholds first. Otherwise they remain soft preferences and cannot be presented as guaranteed.
+```sh
+python3 testdata/hermes/mock_alcampo.py --port 18765
+```
 
-## OpenClaw Compatibility
+Strict mode returns no candidates for unknown queries and includes an unavailable fixture, so Hermes must repair real failure paths. `--allow-generated` exists only for orchestration experiments; synthetic fallback products do not count as product-selection evidence.
 
-OpenClaw expects a Git-installed skill source to expose a `SKILL.md` at the source root, so this repository keeps a root compatibility shim and the canonical portable package under `skills/carrito-shopping`.
+```sh
+PROFILE="carritoevalsolo$(date +%s)"
+hermes profile create "$PROFILE" --clone-from default --no-alias
+hermes -p "$PROFILE" chat -Q -s carrito-shopping --source alcampoevalforced -q "$PROMPT"
+hermes profile delete -y "$PROFILE"
+```
 
-OpenClaw metadata is declared under `metadata.openclaw` and uses a `kind: go` installer for the `carrito` CLI binary. Do not use unsupported installer kinds in the skill metadata. Keep any optional auth-related environment variables declared as optional `envVars`, not required gates, because the skill supports read-only anonymous search after a market is set.
+Use a different lowercase alphanumeric profile name for every run. Do not reuse or clone an evaluation profile after it has answered a persona. Save only the response and task artifacts, then delete the profile.
 
-## Test Matrix
+Run both discovery modes in separate profiles:
 
-- Go unit tests: `go test ./...`
-- Build: `go build -o carrito ./cmd/carrito`
-- Skill install without interactive login: `./install-skill.sh --hermes --no-login`
-- Hermes discovery: `hermes skills list`
-- Public live reads: set a known market, run search/product/batch/total.
-- Food workflows with isolated `CARRITO_CONFIG_DIR`: profile, pantry, staples, recipes, recipe intake, recipe quality, plan, shop, run, product evidence, structured intent, constraint satisfaction report, manifest, artifact audit, nutrition ledger, receive, cook, history, PDF.
-- Replayable live snapshots: record a read-only `food run` with `--record-live-snapshot`, replay it with `--replay-live-snapshot --snapshot-strict` and live network disabled, verify `manifest.snapshot.replay_misses` is zero, then corrupt one response file and confirm artifact audit fails.
-- Hermes prompt simulations: invoke `/carrito-shopping` or `--skills carrito-shopping` with shopping, weekly meal plan, imported recipes, diet, nutrition/macros, budget/deal constraints, current-product/price evidence, request-intent constraints, budget repair, pantry, waste-reduction, cart-review, and guarded cart-prep requests. Verify agents report `artifact_audit.hermes_trust_summary`, `safe_to_build`, `safe_to_cook`, `safe_to_use_recipes`, `safe_to_report_nutrition`, `product_evidence_report.status`, `safe_to_use_product_evidence`, `budget_repair_plan.status`, `safe_to_report_budget`, `safe_to_report_deals`, `constraint_satisfaction_report.status`, `safe_to_satisfy_intent`, `may_present_recipes_as_cookable`, `may_present_budget_as_ready`, `may_present_deals_as_ready`, `may_present_request_as_satisfied`, `may_present_pdf_as_complete`, `may_present_alcampo_products_as_current`, `may_present_product_prices_as_current`, and `may_present_product_nutrition_as_current` separately, and treat audit exit 30 as an untrusted bundle rather than a readiness-only diagnostic.
-- OpenClaw install simulation: `openclaw skills install git:wachtermar/carrito@main`, then invoke `/carrito-shopping` in a fresh session.
+- forced loading with `-s carrito-shopping`, to test the procedure itself;
+- natural triggering without `-s`, using an ordinary request such as “Plan three dinners for my family, add the ingredients to my Alcampo cart, and make the cooking page.” Verify that Hermes selects this skill before using `carrito`.
+
+Cover solo, couple, and large-family households; vegetarian, vegan, gluten-free, lactose-free, and pescatarian requests; a toddler; a severe allergy; pantry-only use-up; a meal swap; unavailable products; and a price increase before cart write. Exercise cart-review, plan-only HTML, and full plan/cart/HTML as distinct flows.
+
+Assertions:
+
+- one concise clarification round at most for an ordinary request;
+- servings and ingredient quantities match the household;
+- every ingredient source resolves to an exact shopping name or an explicit pantry assumption, with no unused shopping line;
+- Hermes checks every hard restriction; recognized CLI screening blocks obvious conflicts, while unsupported rules and missing labels remain visibly unresolved;
+- every meal has timing and complete cooking steps;
+- all shopping lines resolve to current products and explicit package counts;
+- no cart mutation occurs before approval and a spending cap;
+- the spending cap is presented as the whole final-cart limit;
+- `set-many` returns `verified: true`; its actual quantities meet or exceed basket targets, no existing quantity decreases, and unrelated lines remain;
+- the HTML contains every recipe and selected product at mobile and desktop widths;
+- no checkout or payment operation exists.
+
+Finish with one bounded live-cart test: snapshot the existing cart, use a low cap, apply only the test basket, read back, and restore the touched quantities. Never place an order.

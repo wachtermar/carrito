@@ -3,8 +3,6 @@ package alcampo
 import (
 	"context"
 	"net/url"
-
-	"github.com/wachtermar/carrito/internal/money"
 )
 
 type DeliveryDestination struct {
@@ -54,107 +52,6 @@ func (c *Client) DeliveryAddress(ctx context.Context, id string) (DeliveryDestin
 		return DeliveryDestination{}, ErrNotFound
 	}
 	return destinations[0], nil
-}
-
-type SlotsRequest struct {
-	DeliveryDestinationID string `json:"deliveryDestinationId"`
-	RegionID              string `json:"regionId"`
-	DisplayConfiguration  string `json:"displayConfiguration"`
-	ShippingGroupType     string `json:"shippingGroupType"`
-	NumberOfDays          int    `json:"numberOfDays"`
-}
-
-func (c *Client) DeliverySlots(ctx context.Context, deliveryDestinationID, regionID string, days int) (any, error) {
-	if days <= 0 {
-		days = 7
-	}
-	body := SlotsRequest{
-		DeliveryDestinationID: deliveryDestinationID,
-		RegionID:              regionID,
-		DisplayConfiguration:  "DELIVERY_METHOD",
-		ShippingGroupType:     "Alcampo Vans",
-		NumberOfDays:          days,
-	}
-	var root any
-	if err := c.postJSON(ctx, "/api/ecomslots/v2/slots", body, c.BaseURL+"/delivery", "delivery", &root); err != nil {
-		return nil, err
-	}
-	return root, nil
-}
-
-type DeliverySlot struct {
-	SlotID       string      `json:"slot_id,omitempty"`
-	Day          string      `json:"day,omitempty"`
-	StartTime    string      `json:"start_time,omitempty"`
-	EndTime      string      `json:"end_time,omitempty"`
-	TimeZoneID   string      `json:"time_zone_id,omitempty"`
-	DeliveryType string      `json:"delivery_type,omitempty"`
-	CarrierName  string      `json:"carrier_name,omitempty"`
-	Price        money.Money `json:"price,omitempty"`
-	MinimumOrder money.Money `json:"minimum_order,omitempty"`
-	EcoSlot      bool        `json:"eco_slot,omitempty"`
-}
-
-func CollectDeliverySlots(root any) []DeliverySlot {
-	var out []DeliverySlot
-	seen := map[string]bool{}
-	var walkWithDay func(any, string)
-	walkWithDay = func(v any, day string) {
-		switch t := v.(type) {
-		case map[string]any:
-			if d := stringFromKeys(t, "day", "date"); d != "" {
-				day = d
-			}
-			if id := stringFromKeys(t, "slotId", "slot_id", "id"); id != "" {
-				if !seen[id] {
-					seen[id] = true
-					out = append(out, deliverySlotFromMap(t, day))
-				}
-			}
-			for _, child := range t {
-				walkWithDay(child, day)
-			}
-		case []any:
-			for _, child := range t {
-				walkWithDay(child, day)
-			}
-		}
-	}
-	walkWithDay(root, "")
-	return out
-}
-
-func deliverySlotFromMap(m map[string]any, day string) DeliverySlot {
-	window := mapFromKeys(m, "slotWindow", "window", "timeWindow")
-	slot := DeliverySlot{
-		SlotID:       stringFromKeys(m, "slotId", "slot_id", "id"),
-		Day:          day,
-		StartTime:    stringFromKeys(m, "startTime", "start"),
-		EndTime:      stringFromKeys(m, "endTime", "end"),
-		TimeZoneID:   stringFromKeys(m, "timeZoneId", "time_zone_id"),
-		DeliveryType: stringFromKeys(m, "deliveryType", "delivery_type"),
-		CarrierName:  stringFromKeys(m, "carrierName", "carrier_name"),
-	}
-	if window != nil {
-		slot.StartTime = firstString(slot.StartTime, stringFromKeys(window, "startTime", "start"))
-		slot.EndTime = firstString(slot.EndTime, stringFromKeys(window, "endTime", "end"))
-		slot.TimeZoneID = firstString(slot.TimeZoneID, stringFromKeys(window, "timeZoneId", "time_zone_id"))
-	}
-	slot.Price = priceFrom(mapValue(m, "deliveryPrice", "price"))
-	slot.MinimumOrder = priceFrom(mapValue(m, "minimumOrder", "minimumCheckoutThreshold", "minimumOrderValue"))
-	if v := boolFromKeys(m, "ecoSlot", "eco"); v != nil {
-		slot.EcoSlot = *v
-	}
-	return slot
-}
-
-func FindDeliverySlot(root any, slotID string) (DeliverySlot, bool) {
-	for _, slot := range CollectDeliverySlots(root) {
-		if slot.SlotID == slotID {
-			return slot, true
-		}
-	}
-	return DeliverySlot{}, false
 }
 
 func collectDeliveryDestinations(root any) []DeliveryDestination {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"html"
 	"net/url"
 	"path"
@@ -25,7 +26,7 @@ func (c *Client) Product(ctx context.Context, ref string) (Product, error) {
 
 	body, err := c.getPage(ctx, "/products/"+url.PathEscape(productRef), c.BaseURL+"/")
 	if err != nil {
-		p, lookupErr := c.productFromSearch(ctx, ref, err.Error())
+		p, lookupErr := c.productFromSearch(ctx, productRef, err.Error())
 		if lookupErr != nil {
 			return Product{}, err
 		}
@@ -33,24 +34,31 @@ func (c *Client) Product(ctx context.Context, ref string) (Product, error) {
 	}
 	p, ok := productFromHTML(body, c.BaseURL)
 	if !ok {
-		p, lookupErr := c.productFromSearch(ctx, ref, "product detail JSON was not found in page")
+		p, lookupErr := c.productFromSearch(ctx, productRef, "product detail JSON was not found in page")
 		if lookupErr != nil {
 			return Product{}, lookupErr
 		}
 		return p, nil
 	}
-	if p.SKU == "" && productRef != "" {
-		p.SKU = productRef
-	}
-	if p.URL == "" {
-		p.URL = productPageURL(c.BaseURL, p.SKU)
-	}
-	if p.Price.Amount == "" || p.Available == nil || p.Category == "" {
-		if listing, err := c.Lookup(ctx, strutil.FirstNonEmpty(p.SKU, productRef, p.Name)); err == nil {
-			mergeProduct(&p, listing)
+	if !strings.EqualFold(p.SKU, productRef) && !strings.EqualFold(p.ID, productRef) {
+		p, lookupErr := c.productFromSearch(ctx, productRef, "product detail did not identify the exact requested SKU or ID")
+		if lookupErr != nil {
+			return Product{}, fmt.Errorf("%w: detail page returned SKU %q and ID %q for requested ref %q", ErrNotFound, p.SKU, p.ID, productRef)
 		}
+		return p, nil
 	}
-	return p, nil
+	listingRef := strutil.FirstNonEmpty(p.SKU, productRef)
+	listing, err := c.Lookup(ctx, listingRef)
+	if err != nil {
+		return Product{}, fmt.Errorf("refresh current market listing for %q: %w", listingRef, err)
+	}
+	// Search is region-aware, so its identity, price, size, and availability are
+	// authoritative. The detail page is used only to enrich static label data.
+	mergeProductDetails(&listing, p)
+	if listing.URL == "" {
+		listing.URL = productPageURL(c.BaseURL, listing.SKU)
+	}
+	return listing, nil
 }
 
 func (c *Client) productFromSearch(ctx context.Context, ref, detailMessage string) (Product, error) {
@@ -100,8 +108,7 @@ func productFromHTML(body []byte, baseURL string) (Product, bool) {
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.UseNumber()
 		if err := dec.Decode(&root); err == nil {
-			applyDetailState(&p, root, baseURL)
-			found = true
+			found = applyDetailState(&p, root, baseURL) || found
 		}
 	}
 	if raw := extractAssignment(body, "__INITIAL_STATE__"); len(raw) > 0 {
@@ -110,9 +117,11 @@ func productFromHTML(body []byte, baseURL string) (Product, bool) {
 		dec.UseNumber()
 		if err := dec.Decode(&root); err == nil {
 			products := collectProducts(root, baseURL)
-			if len(products) > 0 {
-				mergeProduct(&p, products[0])
-				found = true
+			for _, product := range products {
+				if mergeCompatibleProduct(&p, product) {
+					found = true
+					break
+				}
 			}
 		}
 	}
@@ -158,19 +167,47 @@ func productFromJSONLD(raw []byte, baseURL string) (Product, bool) {
 	return p, true
 }
 
-func applyDetailState(p *Product, root any, baseURL string) {
+func applyDetailState(p *Product, root any, baseURL string) bool {
+	applied := false
 	walk(root, func(m map[string]any) {
 		if bop, ok := m["bopData"].(map[string]any); ok {
-			applyBOP(p, bop, baseURL)
+			contextProduct := productFromMap(m, baseURL)
+			if nested, ok := m["product"].(map[string]any); ok {
+				nestedProduct := productFromMap(nested, baseURL)
+				if contextProduct.SKU == "" {
+					contextProduct.SKU = nestedProduct.SKU
+				}
+				if contextProduct.ID == "" {
+					contextProduct.ID = nestedProduct.ID
+				}
+			}
+			applied = applyBOP(p, bop, contextProduct, baseURL) || applied
 		}
 		if data, ok := m["data"].(map[string]any); ok && stringFromKeys(data, "detailedDescription", "longDescription") != "" {
-			applyBOP(p, data, baseURL)
+			applied = applyBOP(p, data, productFromMap(data, baseURL), baseURL) || applied
 		}
 	})
+	return applied
 }
 
-func applyBOP(p *Product, m map[string]any, baseURL string) {
-	mergeProduct(p, productFromMap(m, baseURL))
+func applyBOP(p *Product, m map[string]any, contextProduct Product, baseURL string) bool {
+	detail := productFromMap(m, baseURL)
+	if detail.SKU == "" {
+		detail.SKU = contextProduct.SKU
+	}
+	if detail.ID == "" {
+		detail.ID = contextProduct.ID
+	}
+	// Label data is safety-sensitive. Do not attribute an anonymous nested
+	// object to the page product merely because it appears in the same state
+	// blob; require an explicit matching SKU or internal ID in the object or
+	// its immediate parent.
+	if detail.SKU == "" && detail.ID == "" {
+		return false
+	}
+	if !mergeCompatibleProduct(p, detail) {
+		return false
+	}
 	if p.Description == "" {
 		p.Description = stripHTML(stringFromKeys(m, "detailedDescription", "longDescription", "description"))
 	}
@@ -179,34 +216,62 @@ func applyBOP(p *Product, m map[string]any, baseURL string) {
 		p.Category = path[len(path)-1]
 	}
 	scanLabelledDetails(p, m)
+	return true
 }
 
 func scanLabelledDetails(p *Product, root any) {
-	walk(root, func(m map[string]any) {
-		label := strings.ToLower(stripHTML(stringFromKeys(m, "title", "name", "label", "key", "fieldName", "heading")))
-		value := stripHTML(stringFromKeys(m, "value", "text", "content", "html", "fieldValue", "description"))
-		if label == "" || value == "" {
-			return
+	var scan func(any)
+	scan = func(value any) {
+		switch typed := value.(type) {
+		case []any:
+			for _, item := range typed {
+				scan(item)
+			}
+		case map[string]any:
+			embedded := Product{
+				ID:  stringFromKeys(typed, "productId"),
+				SKU: stringFromKeys(typed, "retailerProductId", "sku", "retailerSku"),
+			}
+			if nested, ok := typed["product"].(map[string]any); ok {
+				if embedded.ID == "" {
+					embedded.ID = stringFromKeys(nested, "productId")
+				}
+				if embedded.SKU == "" {
+					embedded.SKU = stringFromKeys(nested, "retailerProductId", "sku", "retailerSku")
+				}
+			}
+			if (embedded.ID != "" || embedded.SKU != "") && !compatibleProductIdentity(*p, embedded) {
+				return
+			}
+			m := typed
+			label := strings.ToLower(stripHTML(stringFromKeys(m, "title", "name", "label", "key", "fieldName", "heading")))
+			value := stripHTML(stringFromKeys(m, "value", "text", "content", "html", "fieldValue", "description"))
+			if label != "" && value != "" {
+				switch {
+				case strings.Contains(label, "ingred"):
+					if p.Ingredients == "" {
+						p.Ingredients = value
+					}
+				case strings.Contains(label, "alerg"):
+					if p.Allergens == "" {
+						p.Allergens = value
+					}
+				case strings.Contains(label, "nutric"):
+					if p.Nutrition == "" {
+						p.Nutrition = value
+					}
+				case strings.Contains(label, "descrip"):
+					if p.Description == "" {
+						p.Description = value
+					}
+				}
+			}
+			for _, child := range m {
+				scan(child)
+			}
 		}
-		switch {
-		case strings.Contains(label, "ingred"):
-			if p.Ingredients == "" {
-				p.Ingredients = value
-			}
-		case strings.Contains(label, "alerg"):
-			if p.Allergens == "" {
-				p.Allergens = value
-			}
-		case strings.Contains(label, "nutric"):
-			if p.Nutrition == "" {
-				p.Nutrition = value
-			}
-		case strings.Contains(label, "descrip"):
-			if p.Description == "" {
-				p.Description = value
-			}
-		}
-	})
+	}
+	scan(root)
 }
 
 func mergeProduct(dst *Product, src Product) {
@@ -265,6 +330,64 @@ func mergeProduct(dst *Product, src Product) {
 	if len(dst.Offers) == 0 {
 		dst.Offers = src.Offers
 	}
+}
+
+// mergeCompatibleProduct refuses to combine two identified products unless
+// every identity field they share agrees and at least one field is comparable.
+// This prevents unrelated products embedded elsewhere in a page from donating
+// an internal ID, price, or availability to the requested SKU.
+func mergeCompatibleProduct(dst *Product, src Product) bool {
+	if !compatibleProductIdentity(*dst, src) {
+		return false
+	}
+	mergeProduct(dst, src)
+	return true
+}
+
+func compatibleProductIdentity(dst, src Product) bool {
+	dstIdentified := dst.SKU != "" || dst.ID != ""
+	srcIdentified := src.SKU != "" || src.ID != ""
+	if dstIdentified && srcIdentified {
+		compared := false
+		if dst.SKU != "" && src.SKU != "" {
+			compared = true
+			if !strings.EqualFold(dst.SKU, src.SKU) {
+				return false
+			}
+		}
+		if dst.ID != "" && src.ID != "" {
+			compared = true
+			if !strings.EqualFold(dst.ID, src.ID) {
+				return false
+			}
+		}
+		if !compared {
+			return false
+		}
+	}
+	return true
+}
+
+func mergeProductDetails(dst *Product, detail Product) {
+	if dst.Description == "" {
+		dst.Description = detail.Description
+	}
+	if dst.Ingredients == "" {
+		dst.Ingredients = detail.Ingredients
+	}
+	if dst.Allergens == "" {
+		dst.Allergens = detail.Allergens
+	}
+	if dst.Nutrition == "" {
+		dst.Nutrition = detail.Nutrition
+	}
+	if dst.EAN == "" {
+		dst.EAN = detail.EAN
+	}
+	if dst.URL == "" {
+		dst.URL = detail.URL
+	}
+	dst.Images = appendUnique(dst.Images, detail.Images...)
 }
 
 func appendUnique(dst []string, values ...string) []string {

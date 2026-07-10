@@ -3,8 +3,6 @@ package alcampo
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"path"
 	"regexp"
 	"strings"
 
@@ -369,34 +367,4 @@ func htmlUnescape(s string) string {
 		"&#39;", "'",
 	)
 	return r.Replace(s)
-}
-
-func slugify(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	repl := strings.NewReplacer("á", "a", "é", "e", "í", "i", "ó", "o", "ú", "u", "ü", "u", "ñ", "n")
-	s = repl.Replace(s)
-	var b strings.Builder
-	lastDash := false
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if !lastDash {
-			b.WriteByte('-')
-			lastDash = true
-		}
-	}
-	return strings.Trim(b.String(), "-")
-}
-
-func pathSlug(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	if u, err := url.Parse(raw); err == nil && u.Path != "" {
-		raw = u.Path
-	}
-	return strings.Trim(path.Base(strings.Trim(raw, "/")), "/")
 }

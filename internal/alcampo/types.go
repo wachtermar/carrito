@@ -33,23 +33,7 @@ type Offer struct {
 	Type        string `json:"type,omitempty"`
 }
 
-type Category struct {
-	ID         string     `json:"id,omitempty"`
-	RetailerID string     `json:"retailer_id,omitempty"`
-	Slug       string     `json:"slug,omitempty"`
-	Name       string     `json:"name,omitempty"`
-	Path       string     `json:"path,omitempty"`
-	Children   []Category `json:"children,omitempty"`
-}
-
 type SearchOptions struct {
-	Limit    int
-	RegionID string
-	Sort     string
-	Fresh    bool
-}
-
-type CategoryProductsOptions struct {
 	Limit    int
 	RegionID string
 }

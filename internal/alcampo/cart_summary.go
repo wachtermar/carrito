@@ -120,18 +120,18 @@ func enrichCartItem(item *CartItemSummary, product Product) {
 func collectCartItems(root any, baseURL string) []CartItemSummary {
 	var items []CartItemSummary
 	seen := map[string]bool{}
-	walk(root, func(m map[string]any) {
+	for _, m := range cartLineMaps(root) {
 		item, ok := cartItemFromMap(m, baseURL)
 		if !ok {
-			return
+			continue
 		}
 		key := cartItemKey(item, m)
 		if seen[key] {
-			return
+			continue
 		}
 		seen[key] = true
 		items = append(items, item)
-	})
+	}
 	return items
 }
 
@@ -140,7 +140,10 @@ func cartItemFromMap(m map[string]any, baseURL string) (CartItemSummary, bool) {
 	if qty == "" {
 		return CartItemSummary{}, false
 	}
-	product := cartProductFromMap(m, baseURL)
+	product, err := cartLineProductFromMap(m, baseURL)
+	if err != nil {
+		return CartItemSummary{}, false
+	}
 	if product.ID == "" && product.SKU == "" && product.Name == "" {
 		return CartItemSummary{}, false
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -15,10 +14,10 @@ import (
 
 func requireWriteSession(cfg *config.Config) error {
 	if cfg.Auth.Cookie == "" && cfg.Auth.BearerToken == "" {
-		return errors.New("cart/checkout writes require an Alcampo session; run login, import-har, or import-curl from your own logged-in session")
+		return errors.New("cart writes require an Alcampo session; run login-web, login, import-har, or import-curl from your own logged-in session")
 	}
 	if cfg.Auth.CSRFToken == "" {
-		return errors.New("cart/checkout writes require an x-csrf-token; run login or re-import a copied cURL/HAR request that includes it")
+		return errors.New("cart writes require an x-csrf-token; run login-web, login, or re-import a copied cURL/HAR request that includes it")
 	}
 	return nil
 }
@@ -48,7 +47,7 @@ func verifiedCartTotal(ctx context.Context, client *alcampo.Client) (any, int64,
 func requiredMaxCents(explicit string, cfg *config.Config) (int64, error) {
 	value := resolveMaxEUR(explicit, cfg)
 	if value == "" {
-		return 0, errors.New("cart/checkout writes require a nonzero spending guard via --max, CARRITO_MAX_EUR, or [limits] max_eur")
+		return 0, errors.New("cart writes require a nonzero spending guard via --max, CARRITO_MAX_EUR, or [limits] max_eur")
 	}
 	maxCents, err := money.ParseCents(value)
 	if err != nil {
@@ -94,30 +93,6 @@ func resolveMarket(cfg *config.Config, store string) (string, error) {
 		return "", errors.New("no market set; run 'carrito set-market --region-id <region_uuid>' or pass --store/--market for this command")
 	}
 	return cfg.Defaults.RegionID, nil
-}
-
-func warnLocation(stderr io.Writer, cfg *config.Config, postal, store string) {
-	if postal != "" && store == "" && postal != cfg.Defaults.PostalCode {
-		fmt.Fprintln(stderr, "warning: --postal is accepted as a hint, but anonymous postal-to-region resolution is not verified; using configured region")
-	}
-}
-
-func enforceMax(totalCents int64, explicit string, cfg *config.Config) error {
-	value := resolveMaxEUR(explicit, cfg)
-	if value == "" {
-		return nil
-	}
-	maxCents, err := money.ParseCents(value)
-	if err != nil {
-		return fmt.Errorf("invalid max EUR value: %w", err)
-	}
-	if maxCents <= 0 {
-		return errors.New("spending guard max must be greater than zero")
-	}
-	if totalCents > maxCents {
-		return fmt.Errorf("total %s exceeds spending guard %s", money.Format(totalCents, "EUR"), money.Format(maxCents, "EUR"))
-	}
-	return nil
 }
 
 func resolveMaxEUR(explicit string, cfg *config.Config) string {

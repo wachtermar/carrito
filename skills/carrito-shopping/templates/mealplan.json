@@ -1,0 +1,43 @@
+{
+  "title": "Family meal plan",
+  "household": {
+    "people": 2,
+    "description": "2 adults",
+    "dietary_rules": [],
+    "allergies": [],
+    "dislikes": []
+  },
+  "assumptions": ["olive oil is already at home"],
+  "days": [
+    {
+      "label": "Monday",
+      "meals": [
+        {
+          "type": "dinner",
+          "name": "Recipe name",
+          "servings": 2,
+          "time_minutes": 30,
+          "ingredients": [
+            {"name": "main ingredient", "amount": "amount needed", "source": "Main ingredient"},
+            {"name": "olive oil", "amount": "1 tbsp", "source": "pantry"}
+          ],
+          "steps": [
+            "Complete first cooking step.",
+            "Complete second cooking step."
+          ],
+          "notes": []
+        }
+      ]
+    }
+  ],
+  "shopping": [
+    {
+      "name": "Main ingredient",
+      "needed": "amount needed",
+      "query": "Spanish Alcampo search query",
+      "product_sku": "",
+      "packages": 0,
+      "reason": ""
+    }
+  ]
+}
