@@ -10,6 +10,8 @@ Carrito gives Hermes Agent one useful grocery workflow:
 
 The model handles flexible reasoning; the CLI handles deterministic and risky work. There is no embedded recipe database, pantry engine, nutrition ledger, readiness matrix, PDF pipeline, checkout flow, or order submission.
 
+For the end-to-end control path and the exact code that enforces it, see [Architecture and safety flow](docs/architecture.md).
+
 This project is unofficial and is not affiliated with Alcampo or Auchan. It uses private web APIs that may change. Product labels and physical packaging remain authoritative for allergies.
 
 ## Install for Hermes
