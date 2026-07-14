@@ -1,48 +1,51 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="920" viewBox="0 0 800 920" role="img" aria-labelledby="title desc">
-  <title id="title">Carrito end-to-end control path</title>
-  <desc id="desc">A vertical mobile-readable flow from model proposal through CLI validation, spend guard, write and read-back, bounded recovery, and human checkout.</desc>
-  <defs>
-    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.3" fill="#d9e6dc"/></pattern>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 10 5 0 10z" fill="#111a15"/></marker>
-  </defs>
-  <rect width="800" height="920" fill="#faf8f2"/>
-  <rect width="800" height="920" fill="url(#grid)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="940" viewBox="0 0 800 940" role="img" aria-labelledby="title desc">
+  <title id="title">Carrito flow from a dinner idea to a checked cart</title>
+  <desc id="desc">A vertical product flow covers the meal request, grocery resolution, whole-cart limit, write and read-back, cooking page, and human checkout.</desc>
+  <rect width="800" height="940" fill="#f7f2e8"/>
+  <circle cx="748" cy="54" r="88" fill="#f8e4d7"/>
   <g font-family="Arial, Helvetica, sans-serif">
-    <text x="42" y="52" fill="#65776b" font-size="24" font-weight="900" letter-spacing="1.5">END-TO-END CONTROL PATH</text>
-    <text x="42" y="106" fill="#111a15" font-size="42" font-weight="900">Who can reason. Who can write.</text>
-    <text x="42" y="150" fill="#111a15" font-size="42" font-weight="900">Where automation stops.</text>
+    <circle cx="42" cy="45" r="7" fill="#df6b3a"/>
+    <text x="58" y="52" fill="#1d6046" font-family="Georgia, Times New Roman, serif" font-size="30" font-weight="700">carrito</text>
+    <text x="42" y="110" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="42" font-weight="700">From a dinner idea</text>
+    <text x="42" y="156" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="42" font-weight="700">to a checked cart.</text>
 
-    <g transform="translate(42 190)">
-      <rect width="716" height="104" fill="#eef7f0" stroke="#111a15" stroke-width="4"/>
-      <text x="24" y="42" fill="#65776b" font-size="24" font-weight="900">01 · HERMES AGENT</text>
-      <text x="24" y="80" fill="#111a15" font-size="34" font-weight="900">PROPOSE THE PLAN</text>
-      <line x1="358" y1="104" x2="358" y2="140" stroke="#111a15" stroke-width="4" marker-end="url(#arrow)"/>
+    <g transform="translate(42 204)">
+      <rect width="716" height="104" rx="22" fill="#fffdf8" stroke="#ded9cf" stroke-width="2"/>
+      <circle cx="52" cy="52" r="26" fill="#f8e4d7"/>
+      <text x="52" y="60" text-anchor="middle" fill="#7e3014" font-size="22" font-weight="800">1</text>
+      <text x="98" y="45" fill="#df6b3a" font-size="16" font-weight="800">HOUSEHOLD REQUEST</text>
+      <text x="98" y="77" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="28" font-weight="700">Plan the meals</text>
+      <path d="M358 104v26" stroke="#b9c2bc" stroke-width="4" stroke-linecap="round"/>
 
-      <rect y="150" width="716" height="104" fill="#fff" stroke="#111a15" stroke-width="4"/>
-      <text x="24" y="192" fill="#65776b" font-size="24" font-weight="900">02 · CARRITO CLI</text>
-      <text x="24" y="230" fill="#111a15" font-size="34" font-weight="900">VALIDATE + RESOLVE</text>
-      <line x1="358" y1="254" x2="358" y2="290" stroke="#111a15" stroke-width="4" marker-end="url(#arrow)"/>
+      <rect y="140" width="716" height="104" rx="22" fill="#fffdf8" stroke="#ded9cf" stroke-width="2"/>
+      <circle cx="52" cy="192" r="26" fill="#f8e4d7"/>
+      <text x="52" y="200" text-anchor="middle" fill="#7e3014" font-size="22" font-weight="800">2</text>
+      <text x="98" y="185" fill="#df6b3a" font-size="16" font-weight="800">PRODUCT CANDIDATES</text>
+      <text x="98" y="217" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="28" font-weight="700">Resolve the groceries</text>
+      <path d="M358 244v26" stroke="#b9c2bc" stroke-width="4" stroke-linecap="round"/>
 
-      <rect y="300" width="716" height="104" fill="#ffe182" stroke="#111a15" stroke-width="4"/>
-      <text x="24" y="342" fill="#65776b" font-size="24" font-weight="900">03 · CARRITO CLI</text>
-      <text x="24" y="380" fill="#111a15" font-size="34" font-weight="900">READ CURRENT + GUARD CAP</text>
-      <line x1="358" y1="404" x2="358" y2="440" stroke="#111a15" stroke-width="4" marker-end="url(#arrow)"/>
+      <rect y="280" width="716" height="104" rx="22" fill="#dfece4" stroke="#b9d2c2" stroke-width="2"/>
+      <circle cx="52" cy="332" r="26" fill="#1d6046"/>
+      <text x="52" y="340" text-anchor="middle" fill="#fff" font-size="22" font-weight="800">3</text>
+      <text x="98" y="325" fill="#1d6046" font-size="16" font-weight="800">WHOLE-CART GUARD</text>
+      <text x="98" y="357" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="28" font-weight="700">Check the spending limit</text>
+      <path d="M358 384v26" stroke="#b9c2bc" stroke-width="4" stroke-linecap="round"/>
 
-      <rect y="450" width="716" height="104" fill="#111a15" stroke="#111a15" stroke-width="4"/>
-      <text x="24" y="492" fill="#9db0a3" font-size="24" font-weight="900">04 · CARRITO CLI</text>
-      <text x="24" y="530" fill="#fff" font-size="34" font-weight="900">WRITE + READ BACK</text>
+      <rect y="420" width="716" height="104" rx="22" fill="#1d6046"/>
+      <circle cx="52" cy="472" r="26" fill="#fffdf8"/>
+      <text x="52" y="480" text-anchor="middle" fill="#1d6046" font-size="22" font-weight="800">4</text>
+      <text x="98" y="465" fill="#bfe0cd" font-size="16" font-weight="800">GUARDED ACTION</text>
+      <text x="98" y="497" fill="#fff" font-family="Georgia, Times New Roman, serif" font-size="28" font-weight="700">Write, then read the cart back</text>
+      <path d="M358 524v26" stroke="#b9c2bc" stroke-width="4" stroke-linecap="round"/>
+
+      <rect y="560" width="716" height="104" rx="22" fill="#fffdf8" stroke="#ded9cf" stroke-width="2"/>
+      <circle cx="52" cy="612" r="26" fill="#f8e4d7"/>
+      <text x="52" y="620" text-anchor="middle" fill="#7e3014" font-size="22" font-weight="800">5</text>
+      <text x="98" y="605" fill="#df6b3a" font-size="16" font-weight="800">SHAREABLE OUTPUT</text>
+      <text x="98" y="637" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="28" font-weight="700">Open the cooking page</text>
     </g>
 
-    <g transform="translate(42 776)">
-      <rect width="220" height="96" fill="#eef7f0" stroke="#111a15" stroke-width="4"/>
-      <text x="110" y="39" text-anchor="middle" fill="#65776b" font-size="22" font-weight="900">PASS</text>
-      <text x="110" y="71" text-anchor="middle" fill="#111a15" font-size="28" font-weight="900">VERIFIED</text>
-      <rect x="248" width="220" height="96" fill="#ffe6df" stroke="#111a15" stroke-width="4"/>
-      <text x="358" y="39" text-anchor="middle" fill="#7a554d" font-size="22" font-weight="900">FAIL</text>
-      <text x="358" y="71" text-anchor="middle" fill="#111a15" font-size="22" font-weight="900">RECOVER OR STOP</text>
-      <rect x="496" width="220" height="96" fill="#fff" stroke="#111a15" stroke-width="4"/>
-      <text x="606" y="39" text-anchor="middle" fill="#65776b" font-size="22" font-weight="900">BOUNDARY</text>
-      <text x="606" y="71" text-anchor="middle" fill="#111a15" font-size="22" font-weight="900">HUMAN CHECKOUT</text>
-    </g>
+    <rect x="42" y="898" width="716" height="1" fill="#ded9cf"/>
+    <text x="42" y="870" fill="#7e3014" font-size="22" font-weight="800">AUTOMATION STOPS · YOU REVIEW AND CHECK OUT</text>
   </g>
 </svg>
