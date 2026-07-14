@@ -1,18 +1,59 @@
-# Carrito
+<p align="center">
+  <img src="./docs/assets/carrito-hero.svg" alt="Carrito — guarded grocery actions with validation, spending cap, write, read-back, and human checkout" width="100%">
+</p>
 
-Carrito gives Hermes Agent one useful grocery workflow:
+<p align="center">
+  <strong>A guarded grocery-planning workflow for Hermes Agent.</strong><br>
+  The model proposes. The CLI enforces. A person checks out.
+</p>
 
-1. Hermes designs recipes for the actual household.
-2. Carrito finds current Alcampo Spain products and prices.
-3. The user approves a maximum spend.
-4. Carrito updates the cart and verifies it.
-5. Hermes returns one mobile-friendly HTML file to share with whoever is cooking.
+<p align="center">
+  <a href="https://wachtermar.github.io/carrito/"><strong>Run the public safety demo</strong></a>
+  &nbsp;·&nbsp;
+  <a href="./docs/architecture.md">Inspect the architecture</a>
+  &nbsp;·&nbsp;
+  <a href="#install-for-hermes">Install for Hermes</a>
+</p>
 
-The model handles flexible reasoning; the CLI handles deterministic and risky work. There is no embedded recipe database, pantry engine, nutrition ledger, readiness matrix, PDF pipeline, checkout flow, or order submission.
+## Inspect the control boundary
 
-For the end-to-end control path and the exact code that enforces it, see [Architecture and safety flow](docs/architecture.md).
+<p align="center">
+  <a href="https://wachtermar.github.io/carrito/">
+    <img src="./docs/assets/demo-proof.svg" alt="Carrito stateful browser fixture: two cart lines verified at €2.90 under a €10 cap after an independent read-back; no checkout" width="100%">
+  </a>
+</p>
 
-This project is unofficial and is not affiliated with Alcampo or Auchan. It uses private web APIs that may change. Product labels and physical packaging remain authoritative for allergies.
+The [interactive browser walkthrough](https://wachtermar.github.io/carrito/) runs a sanitized, session-only cart fixture. Set the cap below **€2.90** to see the write refuse before mutation; set it to **€2.90 or more** to mutate the in-memory cart and verify a separately read snapshot. Run it twice to inspect the idempotent path. It makes no retailer request and never reaches checkout. [Open the full successful-run capture →](./docs/assets/demo-preview.png)
+
+For executable proof, the repository's focused Go integration test runs candidate resolution, output generation, guarded mutation, read-back, and an idempotent second run against a stateful local mock:
+
+```sh
+go test ./internal/cli \
+  -run TestMealPlanCandidatesBuildAndGuardedCartReadback \
+  -v
+```
+
+## One workflow, explicit owners
+
+1. **Hermes designs recipes** for the actual household.
+2. **Carrito resolves current products** and validates the plan.
+3. **The user approves a whole-cart maximum spend.**
+4. **Carrito writes and reads back** exact quantities and the final total.
+5. **Hermes returns a mobile cooking page.**
+6. **A person owns checkout, substitutions, delivery, and payment.**
+
+<p align="center">
+  <img src="./docs/assets/control-path.svg" alt="Carrito control path from model proposal through deterministic validation, spending guard, write, read-back, bounded recovery, and human checkout" width="100%">
+</p>
+
+| Boundary | Invariant | Failure behavior |
+|---|---|---|
+| Model → CLI | Plan JSON is untrusted input. | Invalid schema or unresolved products exit nonzero. |
+| CLI → retailer | Authentication, CSRF, readable EUR total, and a positive explicit cap are required. | Refuse before mutation. |
+| Write response → persisted state | A successful response is not final proof. Quantities and whole-cart total must be read back. | Reverse only Carrito's own deltas when safe; otherwise require manual review. |
+| Cart → checkout | The CLI has no checkout or order-submission command. | A person reviews and completes the purchase. |
+
+[Read the source-linked architecture and safety flow →](./docs/architecture.md)
 
 ## Install for Hermes
 
@@ -24,13 +65,13 @@ cd carrito
 ./install-skill.sh
 ```
 
-The installer copies the complete multi-file skill to `~/.hermes/skills/carrito-shopping` and builds `carrito` into `~/.local/bin`. The skill uses its bundled absolute-path launcher, so that directory does not need to be in Hermes' `PATH`. The installer does not open a login window unless requested:
+The installer copies the complete multi-file skill to `~/.hermes/skills/carrito-shopping` and builds `carrito` into `~/.local/bin`. It does not open a login window unless requested:
 
 ```sh
 ./install-skill.sh --login
 ```
 
-From a published GitHub source, install the skill directory rather than a raw `SKILL.md` URL so Hermes receives its reference and template files:
+From a published GitHub source, install the skill directory so Hermes receives its reference and template files:
 
 ```sh
 hermes skills install wachtermar/carrito/skills/carrito-shopping
@@ -47,18 +88,7 @@ Hermes asks only for missing hard facts and the final-cart spending cap. Login h
 
 ## The small contract
 
-Hermes writes one plan JSON with:
-
-- household size, hard dietary rules, allergies, and dislikes;
-- day-by-day meals with servings, timing, ingredients, and cooking steps;
-- one consolidated shopping list;
-- each selected candidate SKU in `product_sku`, plus its package count.
-
-The exact format is documented in [plan-format.md](skills/carrito-shopping/references/plan-format.md).
-
-Carrito exposes three meal-plan operations:
-
-The manual examples below assume `~/.local/bin` is in `PATH`; otherwise invoke `~/.local/bin/carrito` explicitly. Hermes uses the bundled launcher and does not need this setup.
+Hermes writes one plan JSON containing household rules, day-by-day meals, a consolidated shopping list, and the selected candidate SKUs. The exact format is documented in [`plan-format.md`](./skills/carrito-shopping/references/plan-format.md).
 
 ```sh
 carrito mealplan validate plan.json --json
@@ -69,16 +99,14 @@ carrito mealplan build plan.json \
   --json
 ```
 
-`candidates` returns `status: "ready"` only when every shopping line has usable products. Otherwise it returns `status: "incomplete"` with `unresolved_count` and exits nonzero.
+`candidates` returns `status: "ready"` only when every shopping line has usable products. Otherwise it reports `status: "incomplete"`, includes `unresolved_count`, and exits nonzero.
 
-Before asking for approval, Hermes reads the existing cart so the user sees the current total and understands that `--max` limits the whole final cart:
+Before approval, Hermes reads the current cart so the user sees the whole-cart total:
 
 ```sh
 carrito login-web --if-needed --json
 carrito cart get --json
 ```
-
-For a write, the login JSON must report both `"authenticated": true` and `"has_csrf_token": true`; `--if-needed` reopens login when either requirement is missing.
 
 After explicit approval:
 
@@ -86,26 +114,13 @@ After explicit approval:
 carrito cart set-many -f family-plan.basket.txt --max 100 --json
 ```
 
-Basket quantities are minimum targets: `set-many` raises named products when needed, never reduces a larger existing quantity, and leaves unrelated lines alone. It reads the cart back itself, verifies the actual quantities and final total, and returns `verified: true`. If verification fails after a confirmed write, it reverses only its own deltas and verifies them; it never restores a stale snapshot over concurrent additions. Ambiguous outcomes require manual review. The CLI never submits checkout or payment.
+Basket quantities are minimum targets: `set-many` raises named products when needed, never reduces a larger existing quantity, and leaves unrelated lines alone. It reports `verified: true` only after read-back confirms exact quantities and final total. If verification fails after a confirmed write, recovery is bounded to Carrito's own deltas. Ambiguous outcomes stop for manual review.
 
-## Setup and diagnostics
+## Scope and safety
 
-Prices depend on the delivery market:
+Carrito contains no embedded recipe database, pantry engine, nutrition ledger, readiness matrix, PDF pipeline, checkout flow, or order submission. It is unofficial and is not affiliated with Alcampo or Auchan. Private web APIs may change. Product labels and physical packaging remain authoritative for allergies.
 
-```sh
-carrito market --json
-carrito addresses --json
-carrito set-address <delivery_destination_id>
-```
-
-Catalog reads (use the candidate SKU before login):
-
-```sh
-carrito search "pechuga de pollo" --limit 5 --json
-carrito product <sku> --json
-```
-
-Internal product UUID decoration can require an authenticated session; generated basket files use those UUIDs only at cart time. Configuration is stored in `~/.carrito/config.toml` with mode `0600`. Set `CARRITO_CONFIG_DIR` to isolate it. Set `CARRITO_BASE_URL` only for a mock/test server.
+Configuration is stored in `~/.carrito/config.toml` with mode `0600`. Set `CARRITO_CONFIG_DIR` to isolate it. `CARRITO_BASE_URL` is intended only for a mock or test server.
 
 ## Development
 
@@ -113,6 +128,4 @@ Internal product UUID decoration can require an authenticated session; generated
 make check
 ```
 
-This runs formatting checks, unit and integration tests, `go vet`, and a build. Tests use local mock servers and do not mutate a real cart.
-
-For a real account smoke test, first record the current cart, use a low explicit `--max`, add only known test items, require `set-many` to return `verified: true`, and restore only the quantities the test changed. If automatic rollback fails, review the cart manually. Never run live cart mutation in unattended CI.
+This runs formatting checks, unit and integration tests, `go vet`, an installer clone smoke test, and a clean build. Tests use local mock servers and do not mutate a real cart. See [`docs/cli.md`](./docs/cli.md) for the command reference and [`docs/hermes-integration.md`](./docs/hermes-integration.md) for the agent contract.
