@@ -12,34 +12,34 @@
   <body>
     <header class="topbar">
       <div class="brand">Carrito</div>
-      <div class="topbar-note">Public demo · sanitized fixture · no checkout</div>
+      <div class="topbar-note">Meal planning · guarded cart preparation</div>
     </header>
 
     <main>
       <section class="hero" aria-labelledby="page-title">
         <div>
-          <p class="eyebrow">Guarded grocery actions</p>
-          <h1 id="page-title">See the guardrail, not just the promise.</h1>
-          <p class="lede">Carrito lets a model propose a grocery plan while deterministic code owns validation, spend checks, cart writes, read-back, and recovery. This browser fixture makes the boundary inspectable without a retailer account.</p>
+          <p class="eyebrow">From dinner idea to checked cart</p>
+          <h1 id="page-title">Plan dinner. Guard the cart.</h1>
+          <p class="lede">Carrito turns a household meal request into a cooking page and a checked grocery cart. The flexible plan stays separate from spending limits, cart writes, and the final human checkout.</p>
           <div class="hero-links">
-            <a class="button" href="#demo">Run the safety path</a>
-            <a class="button secondary" href="https://github.com/wachtermar/carrito/blob/main/docs/architecture.md">Read exact architecture</a>
+            <a class="button" href="#demo">Try the spending guard</a>
+            <a class="button secondary" href="https://github.com/wachtermar/carrito/blob/main/docs/architecture.md">How the cart stays safe</a>
           </div>
         </div>
 
         <aside class="contract" aria-label="Responsibility contract">
-          <h2>Responsibility contract</h2>
-          <div class="contract-row">Model proposes</div>
-          <div class="contract-row">CLI enforces</div>
-          <div class="contract-row">Person checks out</div>
+          <h2>What happens where</h2>
+          <div class="contract-row">A meal plan is proposed</div>
+          <div class="contract-row">The cart limit is enforced</div>
+          <div class="contract-row">You review and check out</div>
         </aside>
       </section>
 
       <section class="demo-shell" id="demo" aria-labelledby="demo-title">
         <div class="demo-head">
           <div>
-            <p class="section-label">Interactive safety walkthrough</p>
-            <h2 id="demo-title">Change the cap. Inspect the stop.</h2>
+            <p class="section-label">Interactive cart fixture</p>
+            <h2 id="demo-title">Try a budget. See what happens.</h2>
           </div>
           <p>The fixture contains two mock products totaling €2.90. Use a cap below €2.90 to verify that the flow refuses before mutation; use €2.90 or more to mutate the in-memory cart and inspect an independent read-back. Run it twice to see the idempotent path.</p>
         </div>
@@ -88,12 +88,12 @@
       </section>
 
       <section class="proof-grid" aria-label="What the demo establishes">
-        <article class="proof"><p class="section-label">What runs here</p><h3>Stateful in-memory fixture</h3><p>The page evaluates the cap, mutates a session-only cart map, reads an independent snapshot, and exposes pass, refusal, and idempotent states without a network request.</p></article>
-        <article class="proof"><p class="section-label">What runs in the repo</p><h3>Stateful mock integration</h3><p>The Go integration test resolves candidates, builds outputs, mutates a local mock cart, reads it back, and verifies an idempotent second run.</p></article>
-        <article class="proof"><p class="section-label">What this does not prove</p><h3>No live-account result</h3><p>The fixture is not a retailer session, customer outcome, production-scale test, or checkout. Product labels remain authoritative for allergies.</p></article>
+        <article class="proof"><p class="section-label">In this page</p><h3>A safe cart rehearsal</h3><p>The fixture applies a whole-cart limit, changes session-only quantities, reads them back, and shows both pass and refusal paths.</p></article>
+        <article class="proof"><p class="section-label">In the Go project</p><h3>The full mock workflow</h3><p>The integration test resolves groceries, builds the cooking page, changes a local mock cart, reads it back, and checks a second run.</p></article>
+        <article class="proof"><p class="section-label">The honest boundary</p><h3>No retailer or checkout</h3><p>This page is not a live retailer session or customer result. Physical product labels remain authoritative for allergies.</p></article>
       </section>
     </main>
 
-    <footer><p>Carrito is unofficial and is not affiliated with Alcampo or Auchan. The public demo uses sanitized mock data and makes no retailer request.</p></footer>
+    <footer><p>Carrito is an unofficial meal-planning and cart-preparation tool. This demo uses sanitized mock data, makes no retailer request, and never checks out.</p></footer>
   </body>
 </html>

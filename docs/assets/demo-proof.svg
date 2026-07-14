@@ -1,23 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500" role="img" aria-labelledby="title desc">
-  <title id="title">Successful Carrito in-memory browser fixture</title>
-  <desc id="desc">The fixture validates, writes, reads an independent snapshot, verifies two cart lines at 2.90 euros under a 10 euro cap, and stops before checkout.</desc>
-  <defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.3" fill="#314238"/></pattern></defs>
-  <rect width="800" height="500" fill="#111a15"/>
-  <rect width="800" height="500" fill="url(#grid)"/>
-  <rect width="800" height="10" fill="#ffe182"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520" role="img" aria-labelledby="title desc">
+  <title id="title">Carrito mock cart verified inside its spending limit</title>
+  <desc id="desc">Two grocery lines total 2.90 euros inside a 10 euro whole-cart limit. The state is read back and checkout remains human.</desc>
+  <rect width="800" height="520" fill="#f7f2e8"/>
   <g font-family="Arial, Helvetica, sans-serif">
-    <text x="40" y="62" fill="#b8c9be" font-size="24" font-weight="900" letter-spacing="1.4">STATEFUL BROWSER FIXTURE</text>
-    <text x="40" y="124" fill="#fff" font-size="48" font-weight="900">GUARD PASSED.</text>
-    <text x="40" y="174" fill="#fff" font-size="48" font-weight="900">STATE VERIFIED.</text>
+    <circle cx="42" cy="45" r="7" fill="#df6b3a"/>
+    <text x="58" y="52" fill="#1d6046" font-family="Georgia, Times New Roman, serif" font-size="30" font-weight="700">carrito</text>
+    <text x="42" y="104" fill="#df6b3a" font-size="18" font-weight="800" letter-spacing="2">SANITIZED CART REHEARSAL</text>
+    <text x="42" y="158" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="42" font-weight="700">The cart stayed inside</text>
+    <text x="42" y="204" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="42" font-weight="700">the limit.</text>
 
-    <rect x="40" y="210" width="720" height="106" fill="#ffe182" stroke="#080d0a" stroke-width="4"/>
-    <text x="70" y="254" fill="#65776b" font-size="24" font-weight="900">WHOLE-CART CHECK</text>
-    <text x="70" y="296" fill="#111a15" font-size="38" font-weight="900">€2.90 ≤ €10.00</text>
-    <text x="730" y="274" text-anchor="end" fill="#111a15" font-size="32" font-weight="900">VERIFIED: TRUE</text>
+    <rect x="42" y="242" width="716" height="116" rx="24" fill="#1d6046"/>
+    <text x="70" y="278" fill="#bfe0cd" font-size="18" font-weight="800">WHOLE CART</text>
+    <text x="70" y="330" fill="#fff" font-family="Georgia, Times New Roman, serif" font-size="42" font-weight="700">€2.90 of €10.00</text>
+    <rect x="555" y="269" width="174" height="58" rx="29" fill="#fffdf8"/>
+    <text x="642" y="305" text-anchor="middle" fill="#1d6046" font-size="20" font-weight="800">READ BACK ✓</text>
 
-    <rect x="40" y="344" width="720" height="70" fill="#eef7f0" stroke="#080d0a" stroke-width="4"/>
-    <text x="400" y="389" text-anchor="middle" fill="#111a15" font-size="28" font-weight="900">VALIDATE → WRITE → INDEPENDENT READ-BACK</text>
-
-    <text x="40" y="466" fill="#ffe182" font-size="26" font-weight="900">2 LINES · IDEMPOTENT RERUN · NO CHECKOUT</text>
+    <g transform="translate(42 392)">
+      <rect width="164" height="54" rx="27" fill="#fffdf8" stroke="#ded9cf" stroke-width="2"/>
+      <text x="82" y="34" text-anchor="middle" fill="#1f2924" font-size="18" font-weight="750">Validate</text>
+      <text x="224" y="34" text-anchor="middle" fill="#df6b3a" font-size="26">→</text>
+      <rect x="247" width="164" height="54" rx="27" fill="#dfece4" stroke="#b9d2c2" stroke-width="2"/>
+      <text x="329" y="34" text-anchor="middle" fill="#1d6046" font-size="18" font-weight="750">Write</text>
+      <text x="429" y="34" text-anchor="middle" fill="#df6b3a" font-size="26">→</text>
+      <rect x="452" width="264" height="54" rx="27" fill="#f8e4d7" stroke="#e5b69d" stroke-width="2"/>
+      <text x="584" y="34" text-anchor="middle" fill="#7e3014" font-size="18" font-weight="750">Human checkout</text>
+    </g>
+    <text x="42" y="488" fill="#68736d" font-size="20">2 mock lines · idempotent rerun · no retailer request</text>
   </g>
 </svg>

@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>A guarded grocery-planning workflow for Hermes Agent.</strong><br>
-  The model proposes. The CLI enforces. A person checks out.
+  <strong>Turn a household meal request into a cooking page and a guarded grocery cart.</strong><br>
+  Plan flexibly. Enforce the limit. Keep checkout human.
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
   <a href="#install-for-hermes">Install for Hermes</a>
 </p>
 
-## Inspect the control boundary
+## Try the spending guard
 
 <p align="center">
   <a href="https://wachtermar.github.io/carrito/">
@@ -33,7 +33,7 @@ go test ./internal/cli \
   -v
 ```
 
-## One workflow, explicit owners
+## From dinner idea to checked cart
 
 1. **Hermes designs recipes** for the actual household.
 2. **Carrito resolves current products** and validates the plan.

@@ -1,32 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420" role="img" aria-labelledby="title desc">
-  <title id="title">Carrito — guarded grocery actions</title>
-  <desc id="desc">The model proposes a plan, deterministic code enforces the limits, and a person owns checkout.</desc>
-  <defs>
-    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.3" fill="#314238"/></pattern>
-    <filter id="shadow" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="7" dy="7" stdDeviation="0" flood-color="#080d0a"/></filter>
-  </defs>
-  <rect width="800" height="420" fill="#111a15"/>
-  <rect width="800" height="420" fill="url(#grid)" opacity=".72"/>
-  <rect width="800" height="10" fill="#ffe182"/>
-  <rect y="410" width="800" height="10" fill="#ffe182"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="440" viewBox="0 0 800 440" role="img" aria-labelledby="title desc">
+  <title id="title">Carrito — dinner planning with a guarded cart</title>
+  <desc id="desc">A warm meal-planning interface connects a two-day cooking plan to a whole-cart spending limit and human checkout.</desc>
+  <defs><filter id="shadow" x="-20%" y="-20%" width="150%" height="150%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#1f2924" flood-opacity=".13"/></filter></defs>
+  <rect width="800" height="440" fill="#f7f2e8"/>
+  <circle cx="748" cy="54" r="88" fill="#f8e4d7"/>
+  <circle cx="63" cy="406" r="76" fill="#dfece4"/>
   <g font-family="Arial, Helvetica, sans-serif">
-    <rect x="40" y="42" width="18" height="18" fill="#ffe182" stroke="#080d0a" stroke-width="3"/>
-    <text x="72" y="59" fill="#eef7f0" font-size="22" font-weight="800" letter-spacing="1.5">PUBLIC GO SYSTEM</text>
-    <text x="40" y="124" fill="#f7fbf6" font-size="52" font-weight="900" letter-spacing="-2">GUARDED GROCERY</text>
-    <text x="40" y="180" fill="#f7fbf6" font-size="52" font-weight="900" letter-spacing="-2">ACTIONS</text>
-    <text x="42" y="224" fill="#b8c9be" font-size="26" font-weight="700">Inspect every consequential step.</text>
+    <circle cx="42" cy="45" r="7" fill="#df6b3a"/>
+    <text x="58" y="52" fill="#1d6046" font-family="Georgia, Times New Roman, serif" font-size="30" font-weight="700">carrito</text>
+    <text x="42" y="112" fill="#df6b3a" font-size="18" font-weight="800" letter-spacing="2">DINNER PLAN + GUARDED CART</text>
+    <text x="42" y="168" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="48" font-weight="700">Plan dinner.</text>
+    <text x="42" y="220" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="48" font-weight="700">Guard the cart.</text>
+    <text x="44" y="262" fill="#68736d" font-size="22">The flexible plan and the risky action stay separate.</text>
 
-    <g transform="translate(42 264)" filter="url(#shadow)">
-      <rect width="716" height="104" fill="#eef7f0" stroke="#080d0a" stroke-width="4"/>
-      <rect x="16" y="16" width="210" height="72" fill="#fff" stroke="#111a15" stroke-width="3"/>
-      <text x="121" y="47" text-anchor="middle" fill="#111a15" font-size="24" font-weight="900">MODEL</text>
-      <text x="121" y="73" text-anchor="middle" fill="#111a15" font-size="24" font-weight="900">PROPOSES</text>
-      <rect x="253" y="16" width="210" height="72" fill="#ffe182" stroke="#111a15" stroke-width="3"/>
-      <text x="358" y="47" text-anchor="middle" fill="#111a15" font-size="24" font-weight="900">CLI</text>
-      <text x="358" y="73" text-anchor="middle" fill="#111a15" font-size="24" font-weight="900">ENFORCES</text>
-      <rect x="490" y="16" width="210" height="72" fill="#111a15" stroke="#111a15" stroke-width="3"/>
-      <text x="595" y="47" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">HUMAN</text>
-      <text x="595" y="73" text-anchor="middle" fill="#fff" font-size="24" font-weight="900">CHECKOUT</text>
+    <g transform="translate(42 302)">
+      <rect width="148" height="54" rx="27" fill="#fffdf8" stroke="#ded9cf" stroke-width="2"/>
+      <text x="74" y="34" text-anchor="middle" fill="#1f2924" font-size="19" font-weight="750">2 dinners</text>
+      <rect x="164" width="190" height="54" rx="27" fill="#dfece4" stroke="#b9d2c2" stroke-width="2"/>
+      <text x="259" y="34" text-anchor="middle" fill="#1d6046" font-size="19" font-weight="750">€10 cart limit</text>
+      <rect x="370" width="196" height="54" rx="27" fill="#1d6046"/>
+      <text x="468" y="34" text-anchor="middle" fill="#fff" font-size="19" font-weight="750">You check out</text>
+    </g>
+
+    <g transform="translate(578 92)" filter="url(#shadow)">
+      <rect width="174" height="274" rx="24" fill="#fffdf8" stroke="#ded9cf"/>
+      <text x="20" y="34" fill="#df6b3a" font-size="12" font-weight="800" letter-spacing="1.3">FAMILY COOKING PLAN</text>
+      <text x="20" y="64" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="22" font-weight="700">Two quick</text>
+      <text x="20" y="88" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="22" font-weight="700">weeknight</text>
+      <text x="20" y="112" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="22" font-weight="700">meals</text>
+      <line x1="20" y1="127" x2="154" y2="127" stroke="#ded9cf"/>
+      <text x="20" y="150" fill="#df6b3a" font-size="11" font-weight="800">MONDAY</text>
+      <text x="20" y="172" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="17" font-weight="700">Tomato pasta</text>
+      <text x="20" y="191" fill="#68736d" font-size="11">25 min · 2 servings</text>
+      <line x1="20" y1="207" x2="154" y2="207" stroke="#ded9cf"/>
+      <text x="20" y="230" fill="#df6b3a" font-size="11" font-weight="800">TUESDAY</text>
+      <text x="20" y="252" fill="#1f2924" font-family="Georgia, Times New Roman, serif" font-size="17" font-weight="700">Pasta bake</text>
     </g>
   </g>
 </svg>
