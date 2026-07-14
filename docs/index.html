@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Inspect Carrito's guarded cart flow with a sanitized, deterministic browser fixture. No retailer request, account, checkout, or payment.">
+    <title>Carrito — guarded cart demo</title>
+    <link rel="stylesheet" href="./assets/demo.css">
+    <script src="./assets/demo.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Carrito</div>
+      <div class="topbar-note">Public demo · sanitized fixture · no checkout</div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Guarded grocery actions</p>
+          <h1 id="page-title">See the guardrail, not just the promise.</h1>
+          <p class="lede">Carrito lets a model propose a grocery plan while deterministic code owns validation, spend checks, cart writes, read-back, and recovery. This browser fixture makes the boundary inspectable without a retailer account.</p>
+          <div class="hero-links">
+            <a class="button" href="#demo">Run the safety path</a>
+            <a class="button secondary" href="https://github.com/wachtermar/carrito/blob/main/docs/architecture.md">Read exact architecture</a>
+          </div>
+        </div>
+
+        <aside class="contract" aria-label="Responsibility contract">
+          <h2>Responsibility contract</h2>
+          <div class="contract-row">Model proposes</div>
+          <div class="contract-row">CLI enforces</div>
+          <div class="contract-row">Person checks out</div>
+        </aside>
+      </section>
+
+      <section class="demo-shell" id="demo" aria-labelledby="demo-title">
+        <div class="demo-head">
+          <div>
+            <p class="section-label">Interactive safety walkthrough</p>
+            <h2 id="demo-title">Change the cap. Inspect the stop.</h2>
+          </div>
+          <p>The fixture contains two mock products totaling €2.90. Use a cap below €2.90 to verify that the flow refuses before mutation; use €2.90 or more to mutate the in-memory cart and inspect an independent read-back. Run it twice to see the idempotent path.</p>
+        </div>
+
+        <div class="controls">
+          <div class="field">
+            <label for="cap">Whole-cart spending cap</label>
+            <div class="input-wrap"><span>€</span><input id="cap" type="number" inputmode="decimal" min="0.01" step="0.10" value="10.00"></div>
+          </div>
+          <button id="run-demo" type="button">Run guarded mock</button>
+          <button class="secondary" id="reset-demo" type="button">Reset</button>
+        </div>
+
+        <div class="pipeline" aria-label="Guarded action pipeline">
+          <div class="pipeline-step"><span class="step-index">01</span><strong>Plan fixture</strong></div>
+          <div class="pipeline-step"><span class="step-index">02</span><strong>Validate</strong></div>
+          <div class="pipeline-step"><span class="step-index">03</span><strong>Read current</strong></div>
+          <div class="pipeline-step"><span class="step-index">04</span><strong>Guard cap</strong></div>
+          <div class="pipeline-step"><span class="step-index">05</span><strong>Write</strong></div>
+          <div class="pipeline-step"><span class="step-index">06</span><strong>Read back</strong></div>
+        </div>
+
+        <div class="outcome" id="outcome" aria-live="polite"></div>
+
+        <div class="demo-grid">
+          <div class="terminal" aria-live="polite">
+            <div class="terminal-bar" aria-hidden="true"><span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span></div>
+            <ul id="log"></ul>
+          </div>
+
+          <div class="result-card">
+            <article class="plan-card">
+              <div class="plan-meta"><span class="chip">2 adults</span><span class="chip">2 days</span><span class="chip">2 meals</span></div>
+              <p class="section-label">Sanitized plan fixture</p>
+              <div class="meal"><span class="meal-day">Day 1</span><div><strong>Tomato pasta</strong><small>Pasta · tomato sauce · pantry seasoning</small></div></div>
+              <div class="meal"><span class="meal-day">Day 2</span><div><strong>Leftover pasta bake</strong><small>Uses the same two shopping lines</small></div></div>
+            </article>
+            <article class="cart-card">
+              <div><span>Mock cart state</span><strong id="cart-state">Fixture ready</strong></div>
+              <div class="cart-total"><span>Whole cart</span><strong id="cart-total">€0.00</strong></div>
+            </article>
+            <article class="boundary-card"><strong>Hard stop</strong><p>No checkout or payment command exists. A person reviews products, substitutions, delivery details, and payment.</p></article>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="proof-grid" aria-label="What the demo establishes">
+        <article class="proof"><p class="section-label">What runs here</p><h3>Stateful in-memory fixture</h3><p>The page evaluates the cap, mutates a session-only cart map, reads an independent snapshot, and exposes pass, refusal, and idempotent states without a network request.</p></article>
+        <article class="proof"><p class="section-label">What runs in the repo</p><h3>Stateful mock integration</h3><p>The Go integration test resolves candidates, builds outputs, mutates a local mock cart, reads it back, and verifies an idempotent second run.</p></article>
+        <article class="proof"><p class="section-label">What this does not prove</p><h3>No live-account result</h3><p>The fixture is not a retailer session, customer outcome, production-scale test, or checkout. Product labels remain authoritative for allergies.</p></article>
+      </section>
+    </main>
+
+    <footer><p>Carrito is unofficial and is not affiliated with Alcampo or Auchan. The public demo uses sanitized mock data and makes no retailer request.</p></footer>
+  </body>
+</html>
